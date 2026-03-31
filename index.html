@@ -561,7 +561,12 @@ textarea { resize:vertical; min-height:70px; }
         </select>
       </div>
     </div>
-    <div class="card"><div id="hist-list"></div></div>
+    <div class="card">
+      <div id="hist-list"></div>
+      <div style="text-align:center;padding:1rem 0 .5rem">
+        <button id="btn-cargar-mas" class="btn btn-outline" style="font-size:13px" onclick="cargarMas()">Cargar más…</button>
+      </div>
+    </div>
   </div>
 
   <!-- CATALOGO -->
@@ -725,6 +730,7 @@ BPM.forEach(b => bpmSt[b.id] = null);
 
 // ══ Estado ══
 let registros = [];
+let lastKey   = null;  // para paginación 'cargar más'
 let customP   = {added:[],removed:[]};
 let eppSt     = {};
 let pendingPhoto = null;
@@ -997,8 +1003,8 @@ function initFirebase(){
     db = firebase.database();
     setSyncState('syncing','Conectando…');
 
-    // Escuchar registros en tiempo real
-    db.ref('imd_registros').orderByChild('ts').on('value', snap => {
+    // Escuchar últimos 20 registros en tiempo real
+    db.ref('imd_registros').orderByChild('ts').limitToLast(20).on('value', snap => {
       registros = [];
       snap.forEach(child => {
         registros.unshift({_key: child.key, ...child.val()});
@@ -1038,6 +1044,27 @@ function initFirebase(){
     setSyncState('error','Error Firebase — revisa la configuración');
     console.error(e);
   }
+}
+
+// ══ PAGINACIÓN — Cargar más registros ══
+async function cargarMas(){
+  if(!db) return;
+  const btn = document.getElementById('btn-cargar-mas');
+  if(btn){ btn.disabled=true; btn.textContent='Cargando…'; }
+  // Tomar el _key más antiguo que tenemos
+  const oldest = registros.length ? registros[registros.length-1]._key : null;
+  if(!oldest){ if(btn){btn.disabled=false;btn.textContent='Cargar más…';}return; }
+  db.ref('imd_registros').orderByKey().endBefore(oldest).limitToLast(20).once('value', snap => {
+    const nuevos = [];
+    snap.forEach(child => nuevos.unshift({_key:child.key,...child.val()}));
+    if(!nuevos.length){
+      if(btn){ btn.textContent='No hay más registros'; btn.disabled=true; }
+      return;
+    }
+    registros = [...registros, ...nuevos];
+    renderHistorial();
+    if(btn){ btn.disabled=false; btn.textContent='Cargar más…'; }
+  });
 }
 
 function setSyncState(state, label){
@@ -1119,10 +1146,10 @@ function handlePhoto(inp){
     const img=new Image();
     img.onload=()=>{
       const canvas=document.createElement('canvas');
-      const max=480,scale=Math.min(1,max/Math.max(img.width,img.height));
+      const max=400,scale=Math.min(1,max/Math.max(img.width,img.height));
       canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
       canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-      pendingPhoto=canvas.toDataURL('image/jpeg',0.35);
+      pendingPhoto=canvas.toDataURL('image/jpeg',0.30);
       document.getElementById('pp-img').src=pendingPhoto;
       document.getElementById('pp-wrap').style.display='block';
     };
@@ -1646,101 +1673,132 @@ function setExpMes(){
   document.getElementById('exp-ini').value=new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10);
   document.getElementById('exp-fin').value=new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().slice(0,10);
 }
-function exportarExcel(){
+async function exportarExcel(){
   const iniStr=document.getElementById('exp-ini').value,finStr=document.getElementById('exp-fin').value;
   if(!iniStr||!finStr){toast('Selecciona rango de fechas');return;}
+  if(!db){toast('Sin conexión a Firebase');return;}
+
+  const btn = document.querySelector('#tab-exportar .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='Consultando Firebase…';}
+
   const [iy,im,id2]=iniStr.split('-').map(Number),[fy,fm,fd]=finStr.split('-').map(Number);
-  const ini=new Date(iy,im-1,id2),fin=new Date(fy,fm-1,fd,23,59,59);
-  const filtered=registros.filter(r=>{
-    const fg=r.fechaGuardado;if(!fg)return false;
-    const pts=fg.split('/');if(pts.length!==3)return false;
-    const rd=new Date(parseInt(pts[2]),parseInt(pts[1])-1,parseInt(pts[0]));
-    return rd>=ini&&rd<=fin;
-  });
-  if(!filtered.length){toast('Sin registros en ese período');return;}
-  const wb=XLSX.utils.book_new(),total=filtered.length;
-  const avgPct=Math.round(filtered.reduce((s,r)=>{const a=r.applicable??r.total;return s+(a>0?r.totalOk/a:1);},0)/total*100);
-  const full=filtered.filter(r=>r.totalOk===(r.applicable??r.total)&&(r.applicable??r.total)>0).length;
-  const sinEPP=filtered.filter(r=>r.falt&&r.falt.length>0).length;
-  const sinBPM=filtered.filter(r=>r.bpmNocumple&&r.bpmNocumple.length>0).length;
-  const avgBPM=filtered.length?Math.round(filtered.reduce((s,r)=>{
-    const bpmApp=BPM.length, bpmOk=BPM.filter(b=>r.bpm&&r.bpm[b.id]==='cumple').length;
-    return s+(bpmApp>0?bpmOk/bpmApp:1);
-  },0)/filtered.length*100):0;
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([
-    ['IMPREDIMEX — Control de EPP',''],['Período',`${iniStr} al ${finStr}`],['',''],
-    ['── EPP ──',''],
-    ['Total revisiones',total],['Cumplimiento EPP promedio',avgPct+'%'],['Con EPP completo',full],['Con faltantes EPP',sinEPP],['',''],
-    ['── Buenas Prácticas de Manufactura ──',''],
-    ['Cumplimiento BPM promedio',avgBPM+'%'],['Con incumplimientos BPM',sinBPM],['Sin incumplimientos BPM',total-sinBPM],
-  ]),'Resumen');
-  const allEPP = getEPPCatalog();
-  const allBPM = BPM;
-  const det=[['Fecha','Hora','Turno','Trabajador','Depto','Revisó',
-    ...allEPP.map(e=>e.nombre),
-    'EPP OK','EPP Aplicables','% EPP','EPP Faltantes','EPP N/A',
-    ...allBPM.map(b=>b.nombre),
-    'BPM No cumple','Observaciones']];
-  filtered.forEach(r=>{
-    const eppCols = allEPP.map(e=>{const v=r.epp&&r.epp[e.id];return v==='ok'?'OK':v==='nok'?'FALTA':v==='na'?'N/A':'—';});
-    const bpmCols = allBPM.map(b=>{const v=r.bpm&&r.bpm[b.id];return v==='cumple'?'CUMPLE':v==='nocumple'?'NO CUMPLE':'—';});
-    const a=r.applicable??r.total;
-    det.push([r.fechaGuardado,r.horaGuardado,r.turno,r.trab,r.depto,r.sup,
-      ...eppCols,
-      r.totalOk,a,a>0?Math.round(r.totalOk/a*100)+'%':'—',
-      (r.falt||[]).join(', '),(r.naList||[]).join(', '),
-      ...bpmCols,
-      (r.bpmNocumple||[]).join(', '),r.obs||'']);
-  });
-  const wsD=XLSX.utils.aoa_to_sheet(det);
-  wsD['!cols']=[{wch:13},{wch:10},{wch:22},{wch:36},{wch:18},{wch:36},
-    ...allEPP.map(()=>({wch:10})),{wch:5},{wch:9},{wch:10},{wch:35},{wch:25},
-    ...allBPM.map(()=>({wch:14})),{wch:30},{wch:30}];
-  XLSX.utils.book_append_sheet(wb,wsD,'Detalle');
-  const dm={};
-  filtered.forEach(r=>{
-    if(!dm[r.depto])dm[r.depto]={t:0,f:0,ok:0,app:0,bpmF:0,bpmOk:0};
-    dm[r.depto].t++;
-    dm[r.depto].f+=(r.falt&&r.falt.length?1:0);
-    dm[r.depto].ok+=r.totalOk;
-    dm[r.depto].app+=(r.applicable??r.total);
-    dm[r.depto].bpmF+=(r.bpmNocumple&&r.bpmNocumple.length?1:0);
-    dm[r.depto].bpmOk+=BPM.filter(b=>r.bpm&&r.bpm[b.id]==='cumple').length;
-  });
-  const dr=[['Departamento','Revisiones','Con faltantes EPP','% Incumplimiento EPP','% Cumplimiento EPP','Con incumplimiento BPM','% Cumplimiento BPM']];
-  Object.entries(dm).sort((a,b)=>b[1].f-a[1].f).forEach(([d,v])=>dr.push([
-    d,v.t,v.f,Math.round(v.f/v.t*100)+'%',
-    v.app>0?Math.round(v.ok/v.app*100)+'%':'—',
-    v.bpmF, v.t>0?Math.round((v.t-v.bpmF)/v.t*100)+'%':'—'
-  ]));
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(dr),'Por Departamento');
-  const rc={};
-  filtered.forEach(r=>{
-    if(!rc[r.trab]) rc[r.trab]={eppCount:0,bpmCount:0,eppItems:{},bpmItems:{}};
-    if(r.falt&&r.falt.length){
-      rc[r.trab].eppCount++;
-      r.falt.forEach(f=>rc[r.trab].eppItems[f]=(rc[r.trab].eppItems[f]||0)+1);
+  const tsIni = new Date(iy,im-1,id2,0,0,0).getTime();
+  const tsFin = new Date(fy,fm-1,fd,23,59,59).getTime();
+
+  try {
+    // Consulta directa a Firebase solo por el rango de fechas
+    const snap = await db.ref('imd_registros')
+      .orderByChild('ts')
+      .startAt(tsIni)
+      .endAt(tsFin)
+      .once('value');
+
+    const filtered = [];
+    snap.forEach(child => filtered.push({_key:child.key,...child.val()}));
+
+    if(!filtered.length){
+      toast('Sin registros en ese período');
+      if(btn){btn.disabled=false;btn.textContent='⬇ Descargar Excel (.xlsx)';}
+      return;
     }
-    if(r.bpmNocumple&&r.bpmNocumple.length){
-      rc[r.trab].bpmCount++;
-      r.bpmNocumple.forEach(f=>rc[r.trab].bpmItems[f]=(rc[r.trab].bpmItems[f]||0)+1);
-    }
-  });
-  const rr=[['Trabajador','Incumplimientos EPP','Incumplimientos BPM','Total','Estado','Detalle EPP (veces)','Detalle BPM (veces)']];
-  Object.entries(rc)
-    .map(([n,v])=>({n,total:v.eppCount+v.bpmCount,...v}))
-    .filter(x=>x.total>=2)
-    .sort((a,b)=>b.total-a.total)
-    .forEach(x=>{
-      const eppDet=Object.entries(x.eppItems).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} (${v}x)`).join(', ')||'—';
-      const bpmDet=Object.entries(x.bpmItems).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} (${v}x)`).join(', ')||'—';
-      rr.push([x.n, x.eppCount, x.bpmCount, x.total, x.total>=3?'CRÍTICO':'ATENCIÓN', eppDet, bpmDet]);
+
+    if(btn) btn.textContent='Generando Excel…';
+
+    const wb=XLSX.utils.book_new(),total=filtered.length;
+    const avgPct=Math.round(filtered.reduce((s,r)=>{const a=r.applicable??r.total;return s+(a>0?r.totalOk/a:1);},0)/total*100);
+    const full=filtered.filter(r=>r.totalOk===(r.applicable??r.total)&&(r.applicable??r.total)>0).length;
+    const sinEPP=filtered.filter(r=>r.falt&&r.falt.length>0).length;
+    const sinBPM=filtered.filter(r=>r.bpmNocumple&&r.bpmNocumple.length>0).length;
+    const avgBPM=filtered.length?Math.round(filtered.reduce((s,r)=>{
+      const bpmApp=BPM.length, bpmOk=BPM.filter(b=>r.bpm&&r.bpm[b.id]==='cumple').length;
+      return s+(bpmApp>0?bpmOk/bpmApp:1);
+    },0)/filtered.length*100):0;
+
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([
+      ['IMPREDIMEX — Control de EPP',''],['Período',`${iniStr} al ${finStr}`],['',''],
+      ['── EPP ──',''],
+      ['Total revisiones',total],['Cumplimiento EPP promedio',avgPct+'%'],['Con EPP completo',full],['Con faltantes EPP',sinEPP],['',''],
+      ['── Buenas Prácticas de Manufactura ──',''],
+      ['Cumplimiento BPM promedio',avgBPM+'%'],['Con incumplimientos BPM',sinBPM],['Sin incumplimientos BPM',total-sinBPM],
+    ]),'Resumen');
+
+    const allEPP = getEPPCatalog();
+    const allBPM = BPM;
+    const det=[['Fecha','Hora','Turno','Trabajador','Depto','Revisó',
+      ...allEPP.map(e=>e.nombre),
+      'EPP OK','EPP Aplicables','% EPP','EPP Faltantes','EPP N/A',
+      ...allBPM.map(b=>b.nombre),
+      'BPM No cumple','Observaciones']];
+    filtered.forEach(r=>{
+      const eppCols = allEPP.map(e=>{const v=r.epp&&r.epp[e.id];return v==='ok'?'OK':v==='nok'?'FALTA':v==='na'?'N/A':'—';});
+      const bpmCols = allBPM.map(b=>{const v=r.bpm&&r.bpm[b.id];return v==='cumple'?'CUMPLE':v==='nocumple'?'NO CUMPLE':'—';});
+      const a=r.applicable??r.total;
+      det.push([r.fechaGuardado,r.horaGuardado,r.turno,r.trab,r.depto,r.sup,
+        ...eppCols,
+        r.totalOk,a,a>0?Math.round(r.totalOk/a*100)+'%':'—',
+        (r.falt||[]).join(', '),(r.naList||[]).join(', '),
+        ...bpmCols,
+        (r.bpmNocumple||[]).join(', '),r.obs||'']);
     });
-  if(rr.length===1) rr.push(['Sin reincidentes en el período','','','','','','']);
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rr),'Reincidentes');
-  XLSX.writeFile(wb,`Impredimex_EPP_${iniStr}_${finStr}.xlsx`);
-  toast('✅ Excel descargado');
+    const wsD=XLSX.utils.aoa_to_sheet(det);
+    wsD['!cols']=[{wch:13},{wch:10},{wch:22},{wch:36},{wch:18},{wch:36},
+      ...allEPP.map(()=>({wch:10})),{wch:5},{wch:9},{wch:10},{wch:35},{wch:25},
+      ...allBPM.map(()=>({wch:14})),{wch:30},{wch:30}];
+    XLSX.utils.book_append_sheet(wb,wsD,'Detalle');
+
+    const dm={};
+    filtered.forEach(r=>{
+      if(!dm[r.depto])dm[r.depto]={t:0,f:0,ok:0,app:0,bpmF:0,bpmOk:0};
+      dm[r.depto].t++;
+      dm[r.depto].f+=(r.falt&&r.falt.length?1:0);
+      dm[r.depto].ok+=r.totalOk;
+      dm[r.depto].app+=(r.applicable??r.total);
+      dm[r.depto].bpmF+=(r.bpmNocumple&&r.bpmNocumple.length?1:0);
+      dm[r.depto].bpmOk+=BPM.filter(b=>r.bpm&&r.bpm[b.id]==='cumple').length;
+    });
+    const dr=[['Departamento','Revisiones','Con faltantes EPP','% Incumplimiento EPP','% Cumplimiento EPP','Con incumplimiento BPM','% Cumplimiento BPM']];
+    Object.entries(dm).sort((a,b)=>b[1].f-a[1].f).forEach(([d,v])=>dr.push([
+      d,v.t,v.f,Math.round(v.f/v.t*100)+'%',
+      v.app>0?Math.round(v.ok/v.app*100)+'%':'—',
+      v.bpmF, v.t>0?Math.round((v.t-v.bpmF)/v.t*100)+'%':'—'
+    ]));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(dr),'Por Departamento');
+
+    const rc={};
+    filtered.forEach(r=>{
+      if(!rc[r.trab]) rc[r.trab]={eppCount:0,bpmCount:0,eppItems:{},bpmItems:{}};
+      if(r.falt&&r.falt.length){
+        rc[r.trab].eppCount++;
+        r.falt.forEach(f=>rc[r.trab].eppItems[f]=(rc[r.trab].eppItems[f]||0)+1);
+      }
+      if(r.bpmNocumple&&r.bpmNocumple.length){
+        rc[r.trab].bpmCount++;
+        r.bpmNocumple.forEach(f=>rc[r.trab].bpmItems[f]=(rc[r.trab].bpmItems[f]||0)+1);
+      }
+    });
+    const rr=[['Trabajador','Incumplimientos EPP','Incumplimientos BPM','Total','Estado','Detalle EPP (veces)','Detalle BM (veces)']];
+    Object.entries(rc)
+      .map(([n,v])=>({n,total:v.eppCount+v.bpmCount,...v}))
+      .filter(x=>x.total>=2)
+      .sort((a,b)=>b.total-a.total)
+      .forEach(x=>{
+        const eppDet=Object.entries(x.eppItems).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} (${v}x)`).join(', ')||'—';
+        const bpmDet=Object.entries(x.bpmItems).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} (${v}x)`).join(', ')||'—';
+        rr.push([x.n, x.eppCount, x.bpmCount, x.total, x.total>=3?'CRÍTICO':'ATENCIÓN', eppDet, bpmDet]);
+      });
+    if(rr.length===1) rr.push(['Sin reincidentes en el período','','','','','','']);
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rr),'Reincidentes');
+
+    XLSX.writeFile(wb,`Impredimex_EPP_${iniStr}_${finStr}.xlsx`);
+    toast('✅ Excel descargado — '+total+' registros');
+
+  } catch(e){
+    toast('❌ Error al generar Excel: '+e.message);
+  } finally {
+    if(btn){btn.disabled=false;btn.textContent='⬇ Descargar Excel (.xlsx)';}
+  }
 }
+
 
 // ══ Nav ══
 const TAB_NAMES=['checklist','dashboard','historial','catalogo','exportar'];
