@@ -46,9 +46,9 @@
   --brand-red-light: #F9E8EB;
   --brand-gold:      #F0A500;
   --bg-primary:      #ffffff;
-  --bg-secondary:    #F2F4F8;
-  --border-light:    #D8DEE8;
-  --border-mid:      #B8C2D4;
+  --bg-secondary:    #f8f9ff;
+  --border-light:    rgba(0,32,96,0.07);
+  --border-mid:      rgba(0,32,96,0.12);
   --text-primary:    #0D1A2E;
   --text-secondary:  #5A6A80;
   --text-light:      #8A9AB0;
@@ -63,11 +63,11 @@
   --gray:            #7A8A9A;
   --gray-light:      #EEF0F3;
   --radius-sm: 5px; --radius-md: 8px; --radius-lg: 12px;
-  --shadow-sm: 0 1px 4px rgba(0,53,128,.08);
-  --shadow-md: 0 3px 12px rgba(0,53,128,.12);
+  --shadow-sm: 0 0 0 0.5px rgba(0,32,96,.06), 0 2px 8px rgba(0,32,96,.06), 0 8px 24px rgba(0,32,96,.08), 0 24px 48px rgba(0,32,96,.05), inset 0 1px 1px rgba(255,255,255,1), inset 1px 0 1px rgba(255,255,255,.9), inset -1px 0 1px rgba(255,255,255,.9), inset 0 -1px 1px rgba(0,32,96,.03);
+  --shadow-md: 0 0 0 0.5px rgba(0,32,96,.07), 0 4px 12px rgba(0,32,96,.08), 0 16px 40px rgba(0,32,96,.1), 0 32px 64px rgba(0,32,96,.06), inset 0 1px 1px rgba(255,255,255,1), inset 1px 0 1px rgba(255,255,255,.9), inset -1px 0 1px rgba(255,255,255,.9), inset 0 -1px 1px rgba(0,32,96,.03);
 }
 * { box-sizing: border-box; margin:0; padding:0; }
-body { background:var(--bg-secondary); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:var(--text-primary); min-height:100vh; }
+body { background:#ffffff; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:var(--text-primary); min-height:100vh; }
 
 /* ══ LOCK SCREEN ══ */
 #lock-screen {
@@ -144,7 +144,7 @@ body { background:var(--bg-secondary); font-family:-apple-system,BlinkMacSystemF
 /* ══ SYNC BADGE ══ */
 .sync-badge {
   display:inline-flex; align-items:center; gap:5px;
-  font-size:11px; color:rgba(255,255,255,.8); margin-top:4px;
+  font-size:11px; color:#bbb; margin-top:4px;
 }
 .sync-dot {
   width:7px; height:7px; border-radius:50%; background:#ccc;
@@ -152,39 +152,62 @@ body { background:var(--bg-secondary); font-family:-apple-system,BlinkMacSystemF
 }
 .sync-dot.connected { background:#4ADE80; box-shadow:0 0 6px #4ADE80; }
 .sync-dot.syncing   { background:var(--brand-gold); animation:pulse 1s infinite; }
-.sync-dot.error     { background:var(--brand-red); }
+.sync-dot.error     { background:#c0392b; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
 /* ══ TOP STRIPE ══ */
-.top-stripe { height:5px; background:linear-gradient(90deg,var(--brand-navy) 60%,var(--brand-red) 100%); }
+.top-stripe { display:none; }
 
 /* ══ HEADER ══ */
 .hdr {
   display:flex; align-items:center; justify-content:space-between;
-  padding:1rem 1.5rem;
-  background:var(--brand-navy);
-  box-shadow:0 2px 12px rgba(0,0,0,.25);
+  padding:.75rem 1.5rem;
+  background:rgba(255,255,255,.88);
+  backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);
+  border-bottom:0.5px solid rgba(0,32,96,.08);
+  border:1px solid rgba(255,255,255,.98); outline:0.5px solid rgba(0,32,96,.06);
+  box-shadow:0 0 0 0.5px rgba(0,32,96,.05), 0 2px 8px rgba(0,32,96,.05), 0 8px 24px rgba(0,32,96,.06), inset 0 1px 1px rgba(255,255,255,1), inset 1px 0 1px rgba(255,255,255,.9), inset -1px 0 1px rgba(255,255,255,.9), inset 0 -1px 1px rgba(0,32,96,.03);
   margin-bottom:1rem;
 }
-.hdr-l { display:flex; align-items:center; gap:16px; }
+.hdr-l { display:flex; align-items:center; gap:14px; }
 .logo-wrap { display:flex; align-items:center; background:transparent; border-radius:0; padding:0; flex-shrink:0; }
-.app-title { font-size:18px; font-weight:700; color:#fff; letter-spacing:.03em; }
-.app-sub { font-size:11px; color:rgba(255,255,255,.65); margin-top:2px; letter-spacing:.03em; }
-.hdr-date { font-size:11px; color:rgba(255,255,255,.65); text-align:right; line-height:1.5; }
+.app-title { font-size:16px; font-weight:700; color:#002060; letter-spacing:.02em; }
+.app-sub { font-size:10px; color:#9aa; margin-top:2px; letter-spacing:.04em; }
+.hdr-date { font-size:10px; color:#bbb; text-align:right; line-height:1.5; letter-spacing:.03em; }
 
 /* ══ APP ══ */
 .app { max-width:980px; margin:0 auto; padding:0 1rem 1.5rem; }
 
 /* ══ TABS ══ */
-.tabs { display:flex; gap:3px; background:var(--bg-primary); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:4px; margin-bottom:1rem; overflow-x:auto; box-shadow:var(--shadow-sm); }
-.tab { flex:1; padding:8px 10px; border:none; background:transparent; cursor:pointer; border-radius:var(--radius-sm); font-size:12.5px; color:var(--text-secondary); font-family:inherit; white-space:nowrap; transition:all .15s; font-weight:500; }
-.tab:hover:not(.active) { background:var(--bg-secondary); color:var(--brand-navy); }
-.tab.active { background:var(--brand-navy); color:#fff; font-weight:600; box-shadow:0 2px 6px rgba(0,53,128,.3); }
+.tabs {
+  display:flex; gap:0;
+  background:rgba(255,255,255,.88);
+  backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,.98); outline:0.5px solid rgba(0,32,96,.06);
+  box-shadow:0 0 0 0.5px rgba(0,32,96,.05), 0 2px 8px rgba(0,32,96,.05), 0 8px 24px rgba(0,32,96,.06), inset 0 1px 1px rgba(255,255,255,1), inset 1px 0 1px rgba(255,255,255,.9), inset -1px 0 1px rgba(255,255,255,.9), inset 0 -1px 1px rgba(0,32,96,.03);
+  padding:0 8px;
+  margin-bottom:1rem;
+  overflow-x:auto;
+}
+.tab {
+  flex:1; padding:12px 10px 10px;
+  border:none; border-bottom:2px solid transparent;
+  background:transparent; cursor:pointer;
+  font-size:12px; color:#bbb;
+  font-family:inherit; white-space:nowrap;
+  transition:all .2s; font-weight:500;
+  letter-spacing:.03em;
+}
+.tab:hover:not(.active) { color:#002060; border-bottom-color:rgba(0,32,96,.15); }
+.tab.active { color:#002060; font-weight:700; border-bottom:2px solid #002060; background:transparent; box-shadow:none; }
 
 /* ══ CARDS ══ */
-.card { background:var(--bg-primary); border:1px solid var(--border-light); border-radius:var(--radius-lg); padding:1.4rem; margin-bottom:1rem; box-shadow:var(--shadow-sm); }
+.card { background:rgba(255,255,255,.88); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border-radius:16px; border:1px solid rgba(255,255,255,.98); outline:0.5px solid rgba(0,32,96,.06); box-shadow:var(--shadow-sm); padding:1.4rem; margin-bottom:1rem; }
 .card-title-bar { display:flex; align-items:center; gap:8px; margin-bottom:1rem; padding-bottom:.75rem; border-bottom:2px solid var(--brand-navy-light); }
-.card-title-bar .bar-accent { width:4px; height:18px; background:var(--brand-red); border-radius:2px; flex-shrink:0; }
+.card-title-bar .bar-accent { width:3px; height:18px; background:var(--brand-navy); border-radius:2px; flex-shrink:0; }
 .sec-title { font-size:11px; font-weight:700; color:var(--brand-navy); text-transform:uppercase; letter-spacing:.08em; margin-bottom:1rem; }
 
 /* ══ FORMS ══ */
@@ -192,8 +215,8 @@ body { background:var(--bg-secondary); font-family:-apple-system,BlinkMacSystemF
 .fg { display:flex; flex-direction:column; gap:5px; }
 .fg label { font-size:12px; font-weight:600; color:var(--text-secondary); }
 select, input[type=text], input[type=date], textarea {
-  padding:8px 12px; border:1.5px solid var(--border-light); border-radius:var(--radius-md);
-  background:var(--bg-secondary); color:var(--text-primary); font-size:13px; font-family:inherit; width:100%; transition:border-color .15s,box-shadow .15s;
+  padding:8px 12px; border:1px solid rgba(255,255,255,.9); border-radius:var(--radius-md);
+  background:rgba(255,255,255,.85); backdrop-filter:blur(8px); color:var(--text-primary); font-size:13px; font-family:inherit; width:100%; transition:border-color .15s,box-shadow .15s;
 }
 select:focus, input[type=text]:focus, input[type=date]:focus, textarea:focus { outline:none; border-color:var(--brand-navy); box-shadow:0 0 0 3px rgba(0,53,128,.12); }
 textarea { resize:vertical; min-height:70px; }
@@ -205,11 +228,11 @@ textarea { resize:vertical; min-height:70px; }
 .ac-item:last-child { border-bottom:none; }
 .ac-item:hover { background:var(--brand-navy-light); }
 .depto-tag { font-size:10px; color:var(--brand-navy); background:var(--brand-navy-light); padding:2px 8px; border-radius:10px; flex-shrink:0; margin-left:8px; font-weight:600; border:1px solid rgba(0,53,128,.2); }
-.worker-info { display:flex; align-items:center; padding:8px 12px; background:var(--bg-secondary); border:1.5px solid var(--border-light); border-radius:var(--radius-md); font-size:13px; color:var(--text-secondary); min-height:38px; }
+.worker-info { display:flex; align-items:center; padding:8px 12px; background:rgba(255,255,255,.85); border:1.5px solid var(--border-light); border-radius:var(--radius-md); font-size:13px; color:var(--text-secondary); min-height:38px; }
 
 /* ══ EPP GRID ══ */
 .epp-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:.75rem; }
-.epp-item { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border:1.5px solid var(--border-light); border-radius:var(--radius-md); cursor:pointer; transition:all .12s; user-select:none; background:var(--bg-secondary); }
+.epp-item { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border:1.5px solid var(--border-light); border-radius:var(--radius-md); cursor:pointer; transition:all .12s; user-select:none; background:rgba(255,255,255,.85); }
 .epp-item:hover { border-color:var(--brand-navy-mid); transform:translateY(-1px); box-shadow:var(--shadow-sm); }
 .epp-item.ok  { border-color:var(--green);   background:var(--green-light); }
 .epp-item.ok  .et { color:var(--green-dark); } .epp-item.ok  .es { color:var(--green); }
@@ -228,7 +251,7 @@ textarea { resize:vertical; min-height:70px; }
 
 /* ══ BPM ══ */
 .bpm-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:.75rem; }
-.bpm-item { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border:1.5px solid var(--border-light); border-radius:var(--radius-md); cursor:pointer; transition:all .12s; user-select:none; background:var(--bg-secondary); }
+.bpm-item { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border:1.5px solid var(--border-light); border-radius:var(--radius-md); cursor:pointer; transition:all .12s; user-select:none; background:rgba(255,255,255,.85); }
 .bpm-item:hover { border-color:var(--brand-navy-mid); transform:translateY(-1px); box-shadow:var(--shadow-sm); }
 .bpm-item.cumple   { border-color:var(--green);   background:var(--green-light); }
 .bpm-item.cumple   .bt { color:var(--green-dark); }
@@ -244,7 +267,7 @@ textarea { resize:vertical; min-height:70px; }
 .firma-wrap { border:2px solid var(--border-mid); border-radius:var(--radius-md); overflow:hidden; margin-bottom:.75rem; position:relative; background:#fff; }
 .firma-canvas { display:block; width:100%; height:160px; cursor:crosshair; touch-action:none; }
 .firma-actions { display:flex; gap:8px; margin-bottom:1rem; }
-.firma-rechazo { font-size:12px; color:var(--brand-red); font-weight:600; padding:8px; background:var(--red-light); border-radius:var(--radius-md); border:1px solid var(--brand-red); margin-bottom:.75rem; display:none; }
+.firma-rechazo { font-size:12px; color:var(--brand-navy); font-weight:600; padding:8px; background:var(--brand-navy-light); border-radius:var(--radius-md); border:1px solid var(--border-light); margin-bottom:.75rem; display:none; }
 .firma-img { height:50px; border-radius:4px; border:1px solid var(--border-light); background:#fff; }
 .edit-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center; }
 .edit-modal.open { display:flex; }
@@ -265,26 +288,26 @@ textarea { resize:vertical; min-height:70px; }
 .btn-primary { background:var(--brand-navy); color:#fff; width:100%; padding:11px; font-size:14px; letter-spacing:.02em; }
 .btn-primary:hover { background:var(--brand-navy-dark); box-shadow:0 3px 10px rgba(0,53,128,.35); }
 .btn-primary:disabled { opacity:.5; cursor:not-allowed; }
-.btn-red     { background:var(--brand-red); color:#fff; }
-.btn-red:hover { background:var(--brand-red-dark); }
+.btn-red     { background:var(--brand-navy); color:#fff; }
+.btn-red:hover { background:var(--brand-navy-dark); }
 .btn-teal    { background:var(--green-dark); color:#fff; }
 .btn-teal:hover { opacity:.88; }
 .btn-outline { background:transparent; border:1.5px solid var(--border-mid); color:var(--text-primary); }
-.btn-outline:hover { background:var(--bg-secondary); border-color:var(--brand-navy); color:var(--brand-navy); }
+.btn-outline:hover { background:rgba(255,255,255,.85); border-color:var(--brand-navy); color:var(--brand-navy); }
 
 /* ══ METRICS ══ */
 .metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:1rem; }
-.mc { background:var(--brand-navy); border-radius:var(--radius-md); padding:16px; position:relative; overflow:hidden; }
-.mc::before { content:''; position:absolute; top:0; right:0; width:60px; height:60px; background:rgba(255,255,255,.06); border-radius:0 0 0 60px; }
+.mc { background:rgba(0,32,96,.90); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border-radius:14px; border:1px solid rgba(255,255,255,.15); box-shadow:0 0 0 0.5px rgba(0,0,0,.08), 0 4px 12px rgba(0,32,96,.18), 0 12px 30px rgba(0,32,96,.15), inset 0 1px 1px rgba(255,255,255,.18), inset 1px 0 1px rgba(255,255,255,.1), inset -1px 0 1px rgba(255,255,255,.1), inset 0 -1px 1px rgba(0,0,0,.06); padding:16px; position:relative; overflow:hidden; }
+.mc::before { content:''; }
 .mc-label { font-size:10px; font-weight:700; color:rgba(255,255,255,.65); text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px; }
 .mc-val   { font-size:26px; font-weight:700; color:#fff; line-height:1; }
 .mc-sub   { font-size:11px; color:rgba(255,255,255,.5); margin-top:4px; }
-.mc.accent { background:var(--brand-red); }
+.mc.accent { background:rgba(0,32,96,.96); border:1px solid rgba(255,255,255,.2); }
 
 /* ══ BARS ══ */
 .bar-row { display:flex; align-items:center; gap:10px; margin-bottom:9px; }
 .bar-lbl  { font-size:12px; color:var(--text-secondary); width:155px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.bar-track { flex:1; height:8px; background:var(--bg-secondary); border-radius:4px; overflow:hidden; border:1px solid var(--border-light); }
+.bar-track { flex:1; height:8px; background:rgba(255,255,255,.85); border-radius:4px; overflow:hidden; border:1px solid var(--border-light); }
 .bar-fill  { height:100%; border-radius:4px; transition:width .5s; }
 .bar-pct   { font-size:12px; color:var(--text-secondary); width:34px; text-align:right; flex-shrink:0; font-weight:600; }
 
@@ -329,7 +352,7 @@ textarea { resize:vertical; min-height:70px; }
 .photo-modal-close { position:absolute; top:18px; right:22px; color:#fff; font-size:32px; cursor:pointer; background:none; border:none; }
 
 /* ══ TOAST ══ */
-.toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--brand-navy-dark); color:#fff; padding:10px 20px; border-radius:var(--radius-md); font-size:13px; font-weight:600; z-index:9999; opacity:0; transition:opacity .3s; pointer-events:none; white-space:nowrap; box-shadow:0 4px 14px rgba(0,0,0,.25); border-left:4px solid var(--brand-red); }
+.toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--brand-navy-dark); color:#fff; padding:10px 20px; border-radius:var(--radius-md); font-size:13px; font-weight:600; z-index:9999; opacity:0; transition:opacity .3s; pointer-events:none; white-space:nowrap; box-shadow:0 4px 14px rgba(0,0,0,.25); border-left:4px solid var(--brand-navy); }
 .toast.show { opacity:1; }
 
 /* ══ EXPORT ══ */
@@ -400,6 +423,27 @@ textarea { resize:vertical; min-height:70px; }
   </div>
 
   <div class="lock-footer">Impresión y Diseño de México S.A. de C.V.</div>
+</div>
+
+<!-- Modal editar EPP -->
+<div id="edit-epp-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.6);align-items:center;justify-content:center">
+  <div style="background:rgba(255,255,255,.93);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-radius:20px;border:1px solid rgba(255,255,255,.98);box-shadow:0 0 0 0.5px rgba(0,32,96,.07),0 8px 24px rgba(0,32,96,.1),0 24px 60px rgba(0,32,96,.12),inset 0 1px 1px rgba(255,255,255,1),inset 1px 0 1px rgba(255,255,255,.9),inset -1px 0 1px rgba(255,255,255,.9),inset 0 -1px 1px rgba(0,32,96,.03);padding:1.5rem;width:460px;max-width:94vw;box-shadow:var(--shadow-md)">
+    <div style="font-size:14px;font-weight:700;color:var(--brand-navy);margin-bottom:1rem">✏️ Editar EPP</div>
+    <input type="hidden" id="edit-epp-id">
+    <div class="fg" style="margin-bottom:1rem">
+      <label>Nombre del EPP</label>
+      <input type="text" id="edit-epp-nombre">
+    </div>
+    <div class="fg" style="margin-bottom:.5rem">
+      <label>Departamentos que lo usan</label>
+      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:.5rem">Marca los que deben usar este EPP</div>
+      <div id="edit-epp-deptos-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:.75rem"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:1rem">
+      <button class="btn btn-primary" style="flex:2" onclick="saveEditEPP()">Guardar cambios</button>
+      <button class="btn btn-outline" style="flex:1" onclick="closeEditEPPModal()">Cancelar</button>
+    </div>
+  </div>
 </div>
 
 <!-- Modal registro biométrico -->
@@ -732,8 +776,12 @@ let customEPP = {added:[], removed:[]};
 
 function getEPPCatalog(){
   const rm = new Set((customEPP.removed||[]));
-  const base = BASE_EPP_CATALOG.filter(e => !rm.has(e.id));
-  return [...base, ...(customEPP.added||[])];
+  const mod = customEPP.modified||{};
+  const base = BASE_EPP_CATALOG.filter(e => !rm.has(e.id))
+    .map(e => mod[e.id] ? {...e, ...mod[e.id]} : e);
+  const added = (customEPP.added||[]).filter(e => !rm.has(e.id))
+    .map(e => mod[e.id] ? {...e, ...mod[e.id]} : e);
+  return [...base, ...added];
 }
 
 function getEPPForDepto(depto){
@@ -924,15 +972,14 @@ function base64ToBuffer(b64){
 // ── Aplicar permisos según rol ──
 function applyRole(){
   const isAdmin = currentRole === 'admin';
-  // Pestaña catálogo: solo admin
   document.querySelectorAll('.tab').forEach(t => {
     if(t.textContent.includes('Catálogo')) t.style.display = isAdmin ? '' : 'none';
+    if(t.textContent.includes('Dashboard')) t.style.display = isAdmin ? '' : 'none';
   });
-  // Badge de rol en header
   const badge = document.getElementById('role-badge');
   if(badge){
     badge.textContent = isAdmin ? '👤 Admin' : '👷 Supervisor';
-    badge.style.background = isAdmin ? 'rgba(200,16,46,.25)' : 'rgba(255,255,255,.12)';
+    badge.style.background = isAdmin ? 'rgba(0,32,96,.12)' : 'rgba(0,32,96,.06)';
   }
 }
 
@@ -1397,7 +1444,7 @@ function renderBarDepto(){
   registros.forEach(r=>{if(!d[r.depto])d[r.depto]={t:0,f:0};d[r.depto].t++;if(r.falt&&r.falt.length)d[r.depto].f++;});
   const arr=Object.entries(d).map(([k,v])=>({depto:k,pct:Math.round(v.f/v.t*100),f:v.f})).sort((a,b)=>b.pct-a.pct);
   const maxF=Math.max(...arr.map(a=>a.f),1);
-  document.getElementById('bar-depto').innerHTML=arr.map(a=>`<div class="bar-row"><div class="bar-lbl">${a.depto}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(a.f/maxF*100)}%;background:${a.pct>=60?'var(--brand-red)':a.pct>=30?'var(--orange)':'var(--green)'}"></div></div><div class="bar-pct">${a.pct}%</div></div>`).join('');
+  document.getElementById('bar-depto').innerHTML=arr.map(a=>`<div class="bar-row"><div class="bar-lbl">${a.depto}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(a.f/maxF*100)}%;background:${a.pct>=60?'var(--brand-navy)':a.pct>=30?'var(--brand-navy-mid)':'var(--brand-navy-light)'}"></div></div><div class="bar-pct">${a.pct}%</div></div>`).join('');
 }
 
 
@@ -1429,11 +1476,11 @@ function renderHistorial(){
     const pills=(pNok||pNa||pBpm)?`<div class="pills">${pNok}${pNa}${pBpm}</div>`:'';
     const photoBtn=r.foto?`<img class="photo-thumb" src="${r.foto}" onclick="openPhotoUrl('${r._key}')" alt="foto">` : '';
     const firmaBtn = r.firma === 'rechazada'
-      ? `<span style="font-size:11px;font-weight:700;color:var(--brand-red);background:var(--red-light);padding:3px 8px;border-radius:5px;flex-shrink:0">✗ Rechazó firmar</span>`
+      ? `<span style="font-size:11px;font-weight:700;color:var(--brand-navy);background:var(--brand-navy-light);padding:3px 8px;border-radius:5px;flex-shrink:0">✗ Rechazó firmar</span>`
       : r.firma
         ? `<img class="firma-img" src="${r.firma}" onclick="openFirmaUrl('${r._key}')" title="Ver firma" style="cursor:pointer">`
         : '';
-    const delBtn=currentRole==='admin'?`<button onclick="eliminarRegistro('${r._key}')" style="background:none;border:none;cursor:pointer;color:var(--brand-red);font-size:18px;padding:4px;flex-shrink:0" title="Eliminar revisión">🗑</button>`:'';
+    const delBtn=currentRole==='admin'?`<button onclick="eliminarRegistro('${r._key}')" style="background:none;border:none;cursor:pointer;color:var(--brand-navy);font-size:18px;padding:4px;flex-shrink:0" title="Eliminar revisión">🗑</button>`:'';
     const editBtn=currentRole==='admin'?`<button onclick="openEditModal('${r._key}')" style="background:none;border:none;cursor:pointer;color:var(--brand-navy);font-size:18px;padding:4px;flex-shrink:0" title="Editar revisión">✏️</button>`:'';
     return `<div class="rec-item">
       <div style="flex:1">
@@ -1590,12 +1637,15 @@ document.addEventListener('DOMContentLoaded', ()=>{ if(document.getElementById('
 function renderEPPCatalog(){
   const q = (document.getElementById('epp-cat-search')?.value||'').toLowerCase();
   const removed = new Set(customEPP.removed||[]);
-  const all = [...BASE_EPP_CATALOG, ...(customEPP.added||[])];
+  const all = getEPPCatalog().concat(
+    [...BASE_EPP_CATALOG, ...(customEPP.added||[])].filter(e=>(customEPP.removed||[]).includes(e.id))
+      .map(e=>({...e,_isBaja:true}))
+  );
   const filtered = all.filter(e => !q || e.nombre.toLowerCase().includes(q) || e.deptos.join().toLowerCase().includes(q));
   const el = document.getElementById('epp-cat-list');
   if(!filtered.length){el.innerHTML='<div class="empty">Sin resultados.</div>';return;}
   el.innerHTML = filtered.map(e => {
-    const isBaja = removed.has(e.id);
+    const isBaja = (customEPP.removed||[]).includes(e.id) || !!e._isBaja;
     const isAdded = (customEPP.added||[]).some(a=>a.id===e.id);
     const badge = isAdded ? `<span class="badge b-ok" style="font-size:10px;margin-left:7px">Nuevo</span>` : '';
     const eid = e.id.replace(/'/g,"\\'");
@@ -1604,7 +1654,10 @@ function renderEPPCatalog(){
         <span class="cat-name">${e.nombre}</span>${badge}
         <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${e.deptos.join(', ')}</div>
       </div>
-      <button class="btn btn-outline" style="font-size:12px;padding:5px 12px" onclick="${isBaja?`restoreEPP('${eid}')`:`removeEPP('${eid}')`}">${isBaja?'Restaurar':'Dar baja'}</button>
+      <div style="display:flex;gap:6px">
+        ${isBaja?'':`<button class="btn btn-outline" style="font-size:12px;padding:5px 10px" onclick="openEditEPPModal('${eid}')" title="Editar">✏️</button>`}
+        <button class="btn btn-outline" style="font-size:12px;padding:5px 12px" onclick="${isBaja?`restoreEPP('${eid}')`:`removeEPP('${eid}')`}">${isBaja?'Restaurar':'Dar baja'}</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1633,6 +1686,65 @@ async function restoreEPP(id){
   customEPP.removed = (customEPP.removed||[]).filter(x=>x!==id);
   await saveEPPCatalog();
   toast('EPP restaurado');
+  renderEPPCatalog();
+}
+
+// ── Editar EPP ──
+function openEditEPPModal(id){
+  const all = [...BASE_EPP_CATALOG, ...(customEPP.added||[])];
+  const e = all.find(x=>x.id===id);
+  if(!e) return;
+  document.getElementById('edit-epp-id').value = id;
+  document.getElementById('edit-epp-nombre').value = e.nombre;
+  const isTodos = e.deptos.includes('TODOS');
+  // Build checkboxes grid
+  const grid = document.getElementById('edit-epp-deptos-grid');
+  const allDeptos = ['TODOS', ...DEPTOS];
+  grid.innerHTML = allDeptos.map(d => {
+    const checked = e.deptos.includes(d) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:5px 8px;border:1px solid var(--border-light);border-radius:5px;${e.deptos.includes(d)?'background:var(--brand-navy-light);border-color:var(--brand-navy);font-weight:600':''}">
+      <input type="checkbox" value="${d}" ${checked} onchange="updateEditEPPCheck(this)" style="width:14px;height:14px">
+      ${d}
+    </label>`;
+  }).join('');
+  document.getElementById('edit-epp-modal').style.display = 'flex';
+}
+
+function updateEditEPPCheck(cb){
+  // If TODOS is checked, uncheck all others; if any other checked, uncheck TODOS
+  const grid = document.getElementById('edit-epp-deptos-grid');
+  const allCbs = grid.querySelectorAll('input[type=checkbox]');
+  if(cb.value === 'TODOS' && cb.checked){
+    allCbs.forEach(c => { if(c.value!=='TODOS') c.checked=false; });
+  } else if(cb.value !== 'TODOS' && cb.checked){
+    allCbs.forEach(c => { if(c.value==='TODOS') c.checked=false; });
+  }
+  // Update visual style
+  allCbs.forEach(c => {
+    const lbl = c.parentElement;
+    lbl.style.background = c.checked ? 'var(--brand-navy-light)' : '';
+    lbl.style.borderColor = c.checked ? 'var(--brand-navy)' : 'var(--border-light)';
+    lbl.style.fontWeight  = c.checked ? '600' : '';
+  });
+}
+
+function closeEditEPPModal(){
+  document.getElementById('edit-epp-modal').style.display = 'none';
+}
+
+async function saveEditEPP(){
+  const id      = document.getElementById('edit-epp-id').value;
+  const nombre  = document.getElementById('edit-epp-nombre').value.trim();
+  if(!nombre){toast('Ingresa el nombre del EPP');return;}
+  const grid    = document.getElementById('edit-epp-deptos-grid');
+  const deptos  = [...grid.querySelectorAll('input:checked')].map(c=>c.value);
+  if(!deptos.length){toast('Selecciona al menos un departamento');return;}
+
+  customEPP.modified = customEPP.modified||{};
+  customEPP.modified[id] = {nombre, deptos};
+  await saveEPPCatalog();
+  closeEditEPPModal();
+  toast('✅ EPP actualizado');
   renderEPPCatalog();
 }
 async function addWorker(){
@@ -1715,15 +1827,26 @@ async function exportarExcel(){
   const tsFin = new Date(fy,fm-1,fd,23,59,59).getTime();
 
   try {
-    // Consulta directa a Firebase solo por el rango de fechas
-    const snap = await db.ref('imd_registros')
-      .orderByChild('ts')
-      .startAt(tsIni)
-      .endAt(tsFin)
-      .once('value');
+    // Consulta todos los registros y filtra por fecha en cliente
+    // (garantiza compatibilidad con registros antiguos sin campo ts)
+    const snap = await db.ref('imd_registros').once('value');
 
     const filtered = [];
-    snap.forEach(child => filtered.push({_key:child.key,...child.val()}));
+    snap.forEach(child => {
+      const r = child.val();
+      // Filtrar por ts si existe, si no por fechaGuardado
+      let dentroDeRango = false;
+      if(r.ts){
+        dentroDeRango = r.ts >= tsIni && r.ts <= tsFin;
+      } else if(r.fechaGuardado){
+        const pts = r.fechaGuardado.split('/');
+        if(pts.length===3){
+          const rd = new Date(parseInt(pts[2]),parseInt(pts[1])-1,parseInt(pts[0]));
+          dentroDeRango = rd.getTime()>=tsIni && rd.getTime()<=tsFin;
+        }
+      }
+      if(dentroDeRango) filtered.push({_key:child.key,...r});
+    });
 
     if(!filtered.length){
       toast('Sin registros en ese período');
