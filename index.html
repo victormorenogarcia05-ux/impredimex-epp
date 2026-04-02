@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>IMPREDIMEX — Control de EPP</title>
 
 <!-- ╔══════════════════════════════════════════════════════════╗
@@ -216,7 +216,7 @@ body { background:#ffffff; font-family:-apple-system,BlinkMacSystemFont,'Segoe U
 .fg label { font-size:12px; font-weight:600; color:var(--text-secondary); }
 select, input[type=text], input[type=date], textarea {
   padding:8px 12px; border:1px solid rgba(255,255,255,.9); border-radius:var(--radius-md);
-  background:rgba(255,255,255,.85); backdrop-filter:blur(8px); color:var(--text-primary); font-size:13px; font-family:inherit; width:100%; transition:border-color .15s,box-shadow .15s;
+  background:rgba(255,255,255,.85); backdrop-filter:blur(8px); color:var(--text-primary); font-size:16px; font-family:inherit; width:100%; transition:border-color .15s,box-shadow .15s;
 }
 select:focus, input[type=text]:focus, input[type=date]:focus, textarea:focus { outline:none; border-color:var(--brand-navy); box-shadow:0 0 0 3px rgba(0,53,128,.12); }
 textarea { resize:vertical; min-height:70px; }
@@ -1184,13 +1184,36 @@ function buildBPMGrid(){
 
 function toggleBPM(id){
   bpmSt[id] = bpmSt[id] === null ? 'cumple' : bpmSt[id] === 'cumple' ? 'nocumple' : null;
-  buildBPMGrid();
+  // Actualizar solo el elemento tocado
+  const s = bpmSt[id], cls = s || '', icon = s==='cumple'?'✓':s==='nocumple'?'✗':'';
+  const item = document.querySelector(`#bpm-grid .bpm-item[onclick*="'${id}'"]`);
+  if(item){
+    item.className = `bpm-item ${cls}`;
+    const dot = item.querySelector('.bpm-dot');
+    if(dot){ dot.className = `bpm-dot ${cls}`; dot.textContent = icon; }
+  } else {
+    buildBPMGrid(); // fallback
+  }
   checkFirmaRequired();
 }
 function toggleEPP(id){
   const c = eppSt[id]===null?'null':eppSt[id];
   eppSt[id] = NEXT[c]===null||NEXT[c]==='null' ? null : NEXT[c];
-  buildEPPGrid();
+  // Actualizar solo el elemento tocado sin re-renderizar todo el grid
+  const s = eppSt[id], cls = s||'';
+  let di = '';
+  if(s==='ok')  di=`<svg viewBox="0 0 14 14" fill="none"><path d="M2 7l4 4 6-6" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  if(s==='nok') di=`<svg viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="white" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+  if(s==='na')  di=`<svg viewBox="0 0 14 14" fill="none"><path d="M2 7h10" stroke="white" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+  // Find item in grid and update class + dot
+  const item = document.querySelector(`#epp-grid .epp-item[onclick*="'${id}'"]`);
+  if(item){
+    item.className = `epp-item ${cls}`;
+    const dot = item.querySelector('.epp-dot');
+    if(dot){ dot.className = `epp-dot ${cls}`; dot.innerHTML = di; }
+  } else {
+    buildEPPGrid(); // fallback
+  }
   checkFirmaRequired();
 }
 
