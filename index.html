@@ -489,7 +489,6 @@ textarea { resize:vertical; min-height:70px; }
 <div class="app">
   <div class="tabs">
     <button class="tab active" onclick="showTab('checklist')">Checklist</button>
-    <button class="tab" onclick="showTab('dashboard')">Dashboard</button>
     <button class="tab" onclick="showTab('historial')">Historial</button>
     <button class="tab" onclick="showTab('catalogo')">Catálogo</button>
     <button class="tab" onclick="showTab('exportar')">Exportar</button>
@@ -591,69 +590,29 @@ textarea { resize:vertical; min-height:70px; }
     </div>
   </div>
 
-  <!-- DASHBOARD -->
-  <div id="tab-dashboard" style="display:none">
-    <div class="metrics" id="dash-metrics"></div>
-    <div class="card">
-      <div class="card-title-bar"><div class="bar-accent"></div><div class="sec-title" style="margin:0">📈 Tendencia — últimas 8 semanas</div></div>
-      <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title-bar"><div class="bar-accent"></div><div class="sec-title" style="margin:0">📊 Top 5 EPP con más incumplimientos</div></div>
-      <div class="chart-wrap"><canvas id="chart-epp-top"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title-bar"><div class="bar-accent"></div><div class="sec-title" style="margin:0">📊 Buenas Prácticas — incumplimientos por criterio</div></div>
-      <div class="chart-wrap"><canvas id="chart-bpm-top"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title-bar"><div class="bar-accent"></div><div class="sec-title" style="margin:0">Incumplimiento por departamento</div></div>
-      <div id="bar-depto"></div>
-    </div>
-  </div>
-
   <!-- HISTORIAL -->
   <div id="tab-historial" style="display:none">
-    <div class="card" style="padding-bottom:.75rem">
-      <div class="card-title-bar"><div class="bar-accent"></div><div class="sec-title" style="margin:0">Filtros</div></div>
-      <div class="filter-row">
-        <select id="f-turno" onchange="renderHistorial()">
-          <option value="">Todos los turnos</option>
-          <option>Matutino (6:00–14:00)</option>
-          <option>Vespertino (14:00–21:30)</option>
-          <option>Nocturno (21:30–6:00)</option>
-        </select>
-        <select id="f-depto" onchange="renderHistorial()"><option value="">Todos los departamentos</option></select>
-        <input type="text" id="f-buscar" placeholder="Buscar trabajador..." oninput="renderHistorial()" style="min-width:160px">
-        <input type="text" id="f-sup" placeholder="Buscar supervisor..." oninput="renderHistorial()" style="min-width:160px">
-        <select id="f-adjunto" onchange="renderHistorial()">
-          <option value="">Todos los registros</option>
-          <option value="foto">Con fotografía</option>
-          <option value="firma">Con firma</option>
-          <option value="rechazo">Rechazó firmar</option>
-          <option value="cualquier">Cualquier adjunto</option>
-        </select>
-      </div>
-    </div>
+    <!-- Inputs ocultos para compatibilidad con renderHistorial() -->
+    <select id="f-turno" style="display:none"><option value=""></option></select>
+    <select id="f-depto" style="display:none"><option value=""></option></select>
+    <input type="text" id="f-buscar" style="display:none">
+    <input type="text" id="f-sup" style="display:none">
+    <select id="f-adjunto" style="display:none"><option value=""></option></select>
+
     <div class="card">
-      <div id="hist-list"></div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:flex-end;padding:1rem 0 .5rem">
-        <div style="display:flex;flex-direction:column;gap:5px">
-          <div style="font-size:10px;font-weight:700;color:var(--text-light);letter-spacing:.08em;text-transform:uppercase">Buscar trabajador</div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <div class="ac-wrap" style="position:relative;width:220px">
-              <input type="text" id="hist-trab-input" placeholder="Nombre del trabajador…" autocomplete="off" style="font-size:13px;padding:8px 12px">
-              <div class="ac-list" id="ac-hist-trab-list"></div>
-            </div>
-            <button id="hist-buscar-btn" class="btn btn-primary" style="padding:9px 16px;font-size:13px;width:auto;white-space:nowrap" onclick="buscarTrabajador()">🔍 Ver registros</button>
-            <button id="hist-reset-btn" class="btn btn-outline" style="padding:9px 14px;font-size:13px;width:auto;white-space:nowrap;display:none;color:var(--brand-navy);border-color:var(--brand-navy)" onclick="limpiarBusquedaTrabajador()" title="Volver al historial general">✕ Limpiar</button>
-          </div>
+      <!-- Panel de búsqueda móvil -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:.5rem 0 1rem">
+        <div style="font-size:11px;font-weight:700;color:var(--brand-navy);letter-spacing:.1em;text-transform:uppercase">Buscar trabajador</div>
+        <div class="ac-wrap" style="position:relative;width:100%;max-width:420px">
+          <input type="text" id="hist-trab-input" placeholder="Escribe o selecciona un nombre…" autocomplete="off" style="font-size:15px;padding:10px 14px;width:100%;border-radius:var(--radius-md)">
+          <div class="ac-list" id="ac-hist-trab-list"></div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:5px">
-          <div style="font-size:10px;font-weight:700;color:var(--text-light);letter-spacing:.08em;text-transform:uppercase">Paginación</div>
-          <button id="btn-cargar-mas" class="btn btn-outline" style="font-size:13px;height:38px;display:none" onclick="cargarMas()">Cargar más…</button>
+        <div style="display:flex;gap:8px;width:100%;max-width:420px">
+          <button id="hist-buscar-btn" class="btn btn-primary" style="flex:1;font-size:14px;padding:11px" onclick="buscarTrabajador()">🔍 Ver registros</button>
+          <button id="hist-reset-btn" class="btn btn-outline" style="flex:1;font-size:14px;padding:11px;display:none" onclick="limpiarBusquedaTrabajador()">✕ Limpiar</button>
         </div>
       </div>
+      <div id="hist-list"></div>
     </div>
   </div>
 
@@ -990,7 +949,6 @@ function applyRole(){
   const isAdmin = currentRole === 'admin';
   document.querySelectorAll('.tab').forEach(t => {
     if(t.textContent.includes('Catálogo'))  t.style.display = isAdmin ? '' : 'none';
-    if(t.textContent.includes('Dashboard')) t.style.display = isAdmin ? '' : 'none';
     if(t.textContent.includes('Historial')) t.style.display = isAdmin ? '' : 'none';
   });
   const badge = document.getElementById('role-badge');
@@ -1542,7 +1500,7 @@ function renderHistorial(){
   });
   const el=document.getElementById('hist-list');
   if(workerRegistros === null && registros.length === 0){
-    el.innerHTML='<div class="empty" style="padding:2rem 1rem;text-align:center"><div style="font-size:28px;margin-bottom:.75rem">🔍</div><div style="font-weight:700;color:var(--brand-navy);margin-bottom:.4rem">Selecciona un trabajador</div><div style="font-size:13px;color:var(--text-secondary)">Usa el campo <strong>Buscar trabajador</strong> para cargar todos los registros de un colaborador.</div></div>';
+    el.innerHTML='<div style="text-align:center;padding:2.5rem 1rem 1.5rem"><div style="font-size:36px;margin-bottom:.75rem">👆</div><div style="font-weight:700;color:var(--brand-navy);font-size:15px;margin-bottom:.4rem">Selecciona un trabajador</div><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Escribe el nombre arriba y presiona<br><strong>Ver registros</strong> para cargar su historial.</div></div>';
     return;
   }
   if(!list.length){el.innerHTML='<div class="empty">Sin registros para los filtros seleccionados.</div>';return;}
@@ -2035,11 +1993,10 @@ async function exportarExcel(){
 
 
 // ══ Nav ══
-const TAB_NAMES=['checklist','dashboard','historial','catalogo','exportar'];
+const TAB_NAMES=['checklist','historial','catalogo','exportar'];
 function showTab(name){
   TAB_NAMES.forEach(t=>{document.getElementById('tab-'+t).style.display=t===name?'':'none';});
   document.querySelectorAll('.tab').forEach((el,i)=>{el.classList.toggle('active',TAB_NAMES[i]===name);});
-  if(name==='dashboard')renderDashboard();
   if(name==='historial') renderHistorial();
   if(name==='catalogo')  renderCatalogo();
   if(name==='exportar')  setExpSemana();
