@@ -701,6 +701,11 @@ textarea { resize:vertical; min-height:70px; }
 <div class="edit-modal" id="edit-modal">
   <div class="edit-modal-card">
     <div class="edit-modal-title" id="edit-modal-name">Editar revisión</div>
+    <div class="sec-title" style="margin-bottom:.5rem">Realiza la revisión</div>
+    <div class="ac-wrap" style="margin-bottom:1rem">
+      <input type="text" id="edit-sup-input" placeholder="Buscar nombre…" autocomplete="off" style="font-size:14px">
+      <div class="ac-list" id="ac-edit-sup-list"></div>
+    </div>
     <div class="sec-title" style="margin-bottom:.5rem">EPP</div>
     <div class="edit-epp-grid" id="edit-epp-grid"></div>
     <div class="sec-title" style="margin-bottom:.5rem;margin-top:.5rem">Buenas prácticas de manufactura</div>
@@ -1537,12 +1542,18 @@ function renderHistorial(){
   }).join('');
 }
 
+// Helper: busca en workerRegistros primero, luego en registros
+function findRecord(key){
+  if(workerRegistros) return workerRegistros.find(r=>r._key===key) || null;
+  return registros.find(r=>r._key===key) || null;
+}
+
 function openPhotoUrl(key){
-  const rec = registros.find(r=>r._key===key);
+  const rec = findRecord(key);
   if(rec&&rec.foto){document.getElementById('modal-img').src=rec.foto;document.getElementById('photo-modal').classList.add('open');}
 }
 function openFirmaUrl(key){
-  const rec = registros.find(r=>r._key===key);
+  const rec = findRecord(key);
   if(rec&&rec.firma&&rec.firma!=='rechazada'){document.getElementById('modal-img').src=rec.firma;document.getElementById('photo-modal').classList.add('open');}
 }
 
@@ -1553,7 +1564,7 @@ let editBpmSt = {};
 
 function openEditModal(key){
   if(currentRole!=='admin') return;
-  const rec = registros.find(r=>r._key===key);
+  const rec = findRecord(key);
   if(!rec) return;
   editKey = key;
   editEppSt = rec.epp ? {...rec.epp} : {};
@@ -1561,6 +1572,7 @@ function openEditModal(key){
   EPP.forEach(e=>{ if(editEppSt[e.id]===undefined) editEppSt[e.id]=null; });
   BPM.forEach(b=>{ if(editBpmSt[b.id]===undefined) editBpmSt[b.id]=null; });
   document.getElementById('edit-modal-name').textContent = `Editar: ${rec.trab}`;
+  document.getElementById('edit-sup-input').value = rec.sup || '';
   renderEditEPP();
   renderEditBPM();
   document.getElementById('edit-modal').classList.add('open');
@@ -1608,19 +1620,22 @@ function closeEditModal(){
 }
 async function saveEditRecord(){
   if(!editKey||!db) return;
+  const supNuevo = document.getElementById('edit-sup-input').value.trim();
+  if(!supNuevo){ toast('El campo "Realiza la revisión" no puede estar vacío'); return; }
   const falt = EPP.filter(e=>editEppSt[e.id]==='nok').map(e=>e.nombre);
   const naList = EPP.filter(e=>editEppSt[e.id]==='na').map(e=>e.nombre);
   const applicable = EPP.filter(e=>editEppSt[e.id]!=='na').length;
   const totalOk = EPP.filter(e=>editEppSt[e.id]==='ok').length;
   const bpmNocumple = BPM.filter(b=>editBpmSt[b.id]==='nocumple').map(b=>b.nombre);
+  const updates = { sup:supNuevo, epp:editEppSt, bpm:editBpmSt, falt, naList, bpmNocumple, totalOk, applicable };
   try {
-    await db.ref('imd_registros/'+editKey).update({
-      epp: editEppSt, bpm: editBpmSt,
-      falt, naList, bpmNocumple,
-      totalOk, applicable
-    });
+    await db.ref('imd_registros/'+editKey).update(updates);
+    const arr = workerRegistros || registros;
+    const idx = arr.findIndex(r=>r._key===editKey);
+    if(idx !== -1) arr[idx] = {...arr[idx], ...updates};
     toast('✅ Revisión actualizada');
     closeEditModal();
+    renderHistorial();
   } catch(e){
     toast('❌ Error: '+e.message);
   }
@@ -1629,7 +1644,13 @@ function eliminarRegistro(key){
   if(currentRole!=='admin'){toast('Sin permisos para eliminar');return;}
   if(!confirm('¿Eliminar esta revisión permanentemente?')) return;
   db.ref('imd_registros/'+key).remove()
-    .then(()=>toast('✅ Revisión eliminada'))
+    .then(()=>{
+      // Eliminar también del array local
+      if(workerRegistros) workerRegistros = workerRegistros.filter(r=>r._key!==key);
+      else registros = registros.filter(r=>r._key!==key);
+      renderHistorial();
+      toast('✅ Revisión eliminada');
+    })
     .catch(e=>toast('❌ Error: '+e.message));
 }
 function closePhotoModal(){document.getElementById('photo-modal').classList.remove('open');}
@@ -2024,6 +2045,7 @@ setupAC('trab-input','ac-trab-list',p=>{
 document.getElementById('pwd-input').focus();
 checkBioAvailable();
 setupAC('hist-trab-input','ac-hist-trab-list',()=>{},getPersonal);
+setupAC('edit-sup-input','ac-edit-sup-list',()=>{},getPersonal);
 </script>
 </body>
 </html>
