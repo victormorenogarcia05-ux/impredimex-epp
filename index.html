@@ -637,8 +637,22 @@ textarea { resize:vertical; min-height:70px; }
     </div>
     <div class="card">
       <div id="hist-list"></div>
-      <div style="text-align:center;padding:1rem 0 .5rem">
-        <button id="btn-cargar-mas" class="btn btn-outline" style="font-size:13px" onclick="cargarMas()">Cargar más…</button>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:flex-end;padding:1rem 0 .5rem">
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="font-size:10px;font-weight:700;color:var(--text-light);letter-spacing:.08em;text-transform:uppercase">Buscar trabajador</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div class="ac-wrap" style="position:relative;width:220px">
+              <input type="text" id="hist-trab-input" placeholder="Nombre del trabajador…" autocomplete="off" style="font-size:13px;padding:8px 12px">
+              <div class="ac-list" id="ac-hist-trab-list"></div>
+            </div>
+            <button id="hist-buscar-btn" class="btn btn-primary" style="padding:9px 16px;font-size:13px;width:auto;white-space:nowrap" onclick="buscarTrabajador()">🔍 Ver registros</button>
+            <button id="hist-reset-btn" class="btn btn-outline" style="padding:9px 14px;font-size:13px;width:auto;white-space:nowrap;display:none;color:var(--brand-navy);border-color:var(--brand-navy)" onclick="limpiarBusquedaTrabajador()" title="Volver al historial general">✕ Limpiar</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="font-size:10px;font-weight:700;color:var(--text-light);letter-spacing:.08em;text-transform:uppercase">Paginación</div>
+          <button id="btn-cargar-mas" class="btn btn-outline" style="font-size:13px;height:38px;display:none" onclick="cargarMas()">Cargar más…</button>
+        </div>
       </div>
     </div>
   </div>
@@ -808,6 +822,7 @@ BPM.forEach(b => bpmSt[b.id] = null);
 
 // ══ Estado ══
 let registros = [];
+let workerRegistros = null;  // null = modo normal; array = modo búsqueda por trabajador
 let lastKey   = null;  // para paginación 'cargar más'
 let customP   = {added:[],removed:[]};
 let eppSt     = {};
@@ -974,8 +989,9 @@ function base64ToBuffer(b64){
 function applyRole(){
   const isAdmin = currentRole === 'admin';
   document.querySelectorAll('.tab').forEach(t => {
-    if(t.textContent.includes('Catálogo')) t.style.display = isAdmin ? '' : 'none';
+    if(t.textContent.includes('Catálogo'))  t.style.display = isAdmin ? '' : 'none';
     if(t.textContent.includes('Dashboard')) t.style.display = isAdmin ? '' : 'none';
+    if(t.textContent.includes('Historial')) t.style.display = isAdmin ? '' : 'none';
   });
   const badge = document.getElementById('role-badge');
   if(badge){
@@ -1080,27 +1096,15 @@ function initFirebase(){
     db = firebase.database();
     setSyncState('syncing','Conectando…');
 
-    // Escuchar últimos 20 registros en tiempo real
-    db.ref('imd_registros').orderByChild('ts').limitToLast(20).on('value', snap => {
-      registros = [];
-      snap.forEach(child => {
-        registros.unshift({_key: child.key, ...child.val()});
-      });
-      setSyncState('connected','En línea · tiempo real');
-      updateLastSync();
-      purgeOldPhotos();
-      // Refrescar vista activa
-      const active = document.querySelector('.tab.active');
-      if(active){
-        const name = ['checklist','dashboard','historial','catalogo','exportar'][
-          [...document.querySelectorAll('.tab')].indexOf(active)
-        ];
-        if(name==='dashboard') renderDashboard();
-        if(name==='historial')  renderHistorial();
+    // Verificar conexión
+    db.ref('.info/connected').on('value', snap => {
+      if(snap.val() === true){
+        setSyncState('connected','En línea');
+        updateLastSync();
+        purgeOldPhotos();
+      } else {
+        setSyncState('error','Sin conexión');
       }
-    }, err => {
-      setSyncState('error','Sin conexión');
-      console.error(err);
     });
 
     // Escuchar catálogo de personal
@@ -1142,6 +1146,52 @@ async function cargarMas(){
     renderHistorial();
     if(btn){ btn.disabled=false; btn.textContent='Cargar más…'; }
   });
+}
+
+// ══ BÚSQUEDA POR TRABAJADOR (historial) ══
+async function buscarTrabajador(){
+  const nombre = document.getElementById('hist-trab-input').value.trim();
+  if(!nombre){ toast('Escribe o selecciona un trabajador'); return; }
+  if(!db){ toast('Sin conexión a Firebase'); return; }
+  const btn = document.getElementById('hist-buscar-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Buscando…'; }
+  try {
+    // Traer todos los registros y filtrar en cliente — garantiza resultados completos
+    const snap = await db.ref('imd_registros').once('value');
+    const encontrados = [];
+    snap.forEach(child => {
+      const r = child.val();
+      if((r.trab||'').trim().toUpperCase() === nombre.trim().toUpperCase())
+        encontrados.unshift({_key:child.key,...r});
+    });
+    if(!encontrados.length){
+      toast('Sin registros para: ' + nombre);
+    } else {
+      // Guardar en variable separada para no ser pisado por el listener en tiempo real
+      workerRegistros = encontrados;
+      renderHistorial();
+      // Mostrar botón para regresar al modo normal
+      const resetBtn = document.getElementById('hist-reset-btn');
+      if(resetBtn) resetBtn.style.display = '';
+      const btnMas = document.getElementById('btn-cargar-mas');
+      if(btnMas){ btnMas.textContent='Cargar más…'; btnMas.disabled=true; }
+      toast('✅ ' + encontrados.length + ' registro(s) de ' + nombre);
+    }
+  } catch(e){
+    toast('❌ Error al buscar: ' + e.message);
+  } finally {
+    if(btn){ btn.disabled=false; btn.textContent='🔍 Ver registros'; }
+  }
+}
+
+function limpiarBusquedaTrabajador(){
+  workerRegistros = null;
+  document.getElementById('hist-trab-input').value = '';
+  const resetBtn = document.getElementById('hist-reset-btn');
+  if(resetBtn) resetBtn.style.display = 'none';
+  const btnMas = document.getElementById('btn-cargar-mas');
+  if(btnMas){ btnMas.textContent='Cargar más…'; btnMas.disabled=false; btnMas.style.display='none'; }
+  renderHistorial();
 }
 
 function setSyncState(state, label){
@@ -1478,7 +1528,8 @@ function renderHistorial(){
   const fb=document.getElementById('f-buscar').value.toLowerCase();
   const fs=(document.getElementById('f-sup')?.value||'').toLowerCase();
   const fa=document.getElementById('f-adjunto')?.value||'';
-  const list=registros.filter(r=>{
+  const fuente = workerRegistros !== null ? workerRegistros : registros;
+  const list=fuente.filter(r=>{
     if(ft && r.turno!==ft) return false;
     if(fd && r.depto!==fd) return false;
     if(fb && !r.trab.toLowerCase().includes(fb)) return false;
@@ -1490,6 +1541,10 @@ function renderHistorial(){
     return true;
   });
   const el=document.getElementById('hist-list');
+  if(workerRegistros === null && registros.length === 0){
+    el.innerHTML='<div class="empty" style="padding:2rem 1rem;text-align:center"><div style="font-size:28px;margin-bottom:.75rem">🔍</div><div style="font-weight:700;color:var(--brand-navy);margin-bottom:.4rem">Selecciona un trabajador</div><div style="font-size:13px;color:var(--text-secondary)">Usa el campo <strong>Buscar trabajador</strong> para cargar todos los registros de un colaborador.</div></div>';
+    return;
+  }
   if(!list.length){el.innerHTML='<div class="empty">Sin registros para los filtros seleccionados.</div>';return;}
   el.innerHTML=list.slice(0,100).map(r=>{
     const app=r.applicable??r.total,pct=app>0?Math.round(r.totalOk/app*100):100;
@@ -2011,6 +2066,7 @@ setupAC('trab-input','ac-trab-list',p=>{
 },getPersonal);
 document.getElementById('pwd-input').focus();
 checkBioAvailable();
+setupAC('hist-trab-input','ac-hist-trab-list',()=>{},getPersonal);
 </script>
 </body>
 </html>
