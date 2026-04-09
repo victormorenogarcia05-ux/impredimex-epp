@@ -1920,9 +1920,16 @@ async function exportarExcel(){
 
     if(btn) btn.textContent='Generando Excel…';
 
+    // Helper: recalcula ok/app desde el objeto epp real (igual que en historial)
+    function calcEPP(r){
+      let ok=0,app=0;
+      if(r.epp){ Object.values(r.epp).forEach(v=>{ if(v==='ok'||v==='nok'){app++;if(v==='ok')ok++;} }); }
+      return {ok, app, pct: app>0 ? Math.round(ok/app*100) : 100};
+    }
+
     const wb=XLSX.utils.book_new(),total=filtered.length;
-    const avgPct=Math.round(filtered.reduce((s,r)=>{const a=r.applicable??r.total;return s+(a>0?r.totalOk/a:1);},0)/total*100);
-    const full=filtered.filter(r=>r.totalOk===(r.applicable??r.total)&&(r.applicable??r.total)>0).length;
+    const avgPct=Math.round(filtered.reduce((s,r)=>{ const c=calcEPP(r); return s+(c.pct/100); },0)/total*100);
+    const full=filtered.filter(r=>calcEPP(r).pct===100).length;
     const sinEPP=filtered.filter(r=>r.falt&&r.falt.length>0).length;
     const sinBPM=filtered.filter(r=>r.bpmNocumple&&r.bpmNocumple.length>0).length;
     const avgBPM=filtered.length?Math.round(filtered.reduce((s,r)=>{
@@ -1948,11 +1955,13 @@ async function exportarExcel(){
     filtered.forEach(r=>{
       const eppCols = allEPP.map(e=>{const v=r.epp&&r.epp[e.id];return v==='ok'?'OK':v==='nok'?'FALTA':v==='na'?'N/A':'—';});
       const bpmCols = allBPM.map(b=>{const v=r.bpm&&r.bpm[b.id];return v==='cumple'?'CUMPLE':v==='nocumple'?'NO CUMPLE':'—';});
-      const a=r.applicable??r.total;
+      const {ok,app,pct} = calcEPP(r);
+      const faltantes = r.epp ? Object.entries(r.epp).filter(([,v])=>v==='nok').map(([id])=>{ const e=allEPP.find(x=>x.id===id); return e?e.nombre:id; }).join(', ') : '';
+      const naItems   = r.epp ? Object.entries(r.epp).filter(([,v])=>v==='na' ).map(([id])=>{ const e=allEPP.find(x=>x.id===id); return e?e.nombre:id; }).join(', ') : '';
       det.push([r.fechaGuardado,r.horaGuardado,r.turno,r.trab,r.depto,r.sup,
         ...eppCols,
-        r.totalOk,a,a>0?Math.round(r.totalOk/a*100)+'%':'—',
-        (r.falt||[]).join(', '),(r.naList||[]).join(', '),
+        ok, app, app>0?pct+'%':'—',
+        faltantes, naItems,
         ...bpmCols,
         (r.bpmNocumple||[]).join(', '),r.obs||'']);
     });
@@ -1965,10 +1974,11 @@ async function exportarExcel(){
     const dm={};
     filtered.forEach(r=>{
       if(!dm[r.depto])dm[r.depto]={t:0,f:0,ok:0,app:0,bpmF:0,bpmOk:0};
+      const {ok,app}=calcEPP(r);
       dm[r.depto].t++;
       dm[r.depto].f+=(r.falt&&r.falt.length?1:0);
-      dm[r.depto].ok+=r.totalOk;
-      dm[r.depto].app+=(r.applicable??r.total);
+      dm[r.depto].ok+=ok;
+      dm[r.depto].app+=app;
       dm[r.depto].bpmF+=(r.bpmNocumple&&r.bpmNocumple.length?1:0);
       dm[r.depto].bpmOk+=BPM.filter(b=>r.bpm&&r.bpm[b.id]==='cumple').length;
     });
