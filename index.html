@@ -1510,7 +1510,10 @@ function renderHistorial(){
   }
   if(!list.length){el.innerHTML='<div class="empty">Sin registros para los filtros seleccionados.</div>';return;}
   el.innerHTML=list.slice(0,100).map(r=>{
-    const app=r.applicable??r.total,pct=app>0?Math.round(r.totalOk/app*100):100;
+    // Recalcular % desde el objeto epp real — ignora totalOk/applicable almacenados que pueden estar desactualizados
+    let appCalc=0, okCalc=0;
+    if(r.epp){ Object.values(r.epp).forEach(v=>{ if(v==='ok'||v==='nok'){appCalc++;if(v==='ok')okCalc++;} }); }
+    const pct = appCalc>0 ? Math.round(okCalc/appCalc*100) : 100;
     const bc=pct===100?'b-ok':pct>=60?'b-warn':'b-nok';
     const pNok=r.falt&&r.falt.length?r.falt.map(f=>`<span class="pill">EPP: ${f}</span>`).join(''):'';
     const pNa=r.naList&&r.naList.length?r.naList.map(f=>`<span class="pill-na">N/A: ${f}</span>`).join(''):'';
