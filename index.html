@@ -508,7 +508,7 @@ textarea { resize:vertical; min-height:70px; }
         </div>
         <div class="fg">
           <label>Turno</label>
-          <select id="turno">
+          <select id="turno" disabled>
             <option value="">Seleccionar turno...</option>
             <option>Matutino (6:00–14:00)</option>
             <option>Vespertino (14:00–21:30)</option>
@@ -1510,10 +1510,7 @@ function renderHistorial(){
   }
   if(!list.length){el.innerHTML='<div class="empty">Sin registros para los filtros seleccionados.</div>';return;}
   el.innerHTML=list.slice(0,100).map(r=>{
-    // Recalcular % desde el objeto epp real — ignora totalOk/applicable almacenados que pueden estar desactualizados
-    let appCalc=0, okCalc=0;
-    if(r.epp){ Object.values(r.epp).forEach(v=>{ if(v==='ok'||v==='nok'){appCalc++;if(v==='ok')okCalc++;} }); }
-    const pct = appCalc>0 ? Math.round(okCalc/appCalc*100) : 100;
+    const {ok:okCalc, app:appCalc, pct} = calcEPP(r);
     const bc=pct===100?'b-ok':pct>=60?'b-warn':'b-nok';
     const pNok=r.falt&&r.falt.length?r.falt.map(f=>`<span class="pill">EPP: ${f}</span>`).join(''):'';
     const pNa=r.naList&&r.naList.length?r.naList.map(f=>`<span class="pill-na">N/A: ${f}</span>`).join(''):'';
@@ -1549,6 +1546,14 @@ function renderHistorial(){
 function findRecord(key){
   if(workerRegistros) return workerRegistros.find(r=>r._key===key) || null;
   return registros.find(r=>r._key===key) || null;
+}
+
+// Helper: recalcula EPP ok/app/pct desde el objeto epp real
+function calcEPP(r){
+  let app=0, ok=0;
+  if(r.epp){ Object.values(r.epp).forEach(v=>{ if(v==='ok'||v==='nok'){app++;if(v==='ok')ok++;} }); }
+  const pct = app>0 ? Math.round(ok/app*100) : 100;
+  return {ok, app, pct};
 }
 
 function openPhotoUrl(key){
@@ -1695,7 +1700,26 @@ function showCatTab(tab){
   document.getElementById('ct-epp-btn').className      = tab==='epp'      ? 'btn btn-primary' : 'btn btn-outline';
   if(tab==='epp') renderEPPCatalog();
 }
-document.addEventListener('DOMContentLoaded', ()=>{ if(document.getElementById('ct-epp')) document.getElementById('ct-epp').style.display='none'; });
+function autoSetTurno(){
+  const sel=document.getElementById('turno');
+  if(!sel) return;
+  const now=new Date();
+  const mins=now.getHours()*60+now.getMinutes();
+  // Matutino  06:00–14:00  → 360–839
+  // Vespertino 14:00–21:30 → 840–1289
+  // Nocturno  21:30–06:00  → 1290–1439 y 0–359
+  let turno;
+  if(mins>=360 && mins<840)       turno='Matutino (6:00\u201314:00)';
+  else if(mins>=840 && mins<1290) turno='Vespertino (14:00\u201321:30)';
+  else                             turno='Nocturno (21:30\u20136:00)';
+  for(let i=0;i<sel.options.length;i++){
+    if(sel.options[i].text===turno){ sel.selectedIndex=i; break; }
+  }
+}
+document.addEventListener('DOMContentLoaded', ()=>{
+  if(document.getElementById('ct-epp')) document.getElementById('ct-epp').style.display='none';
+  autoSetTurno();
+});
 
 // ── Catálogo EPP ──
 function renderEPPCatalog(){
@@ -1920,16 +1944,9 @@ async function exportarExcel(){
 
     if(btn) btn.textContent='Generando Excel…';
 
-    // Helper: recalcula ok/app desde el objeto epp real (igual que en historial)
-    function calcEPP(r){
-      let ok=0,app=0;
-      if(r.epp){ Object.values(r.epp).forEach(v=>{ if(v==='ok'||v==='nok'){app++;if(v==='ok')ok++;} }); }
-      return {ok, app, pct: app>0 ? Math.round(ok/app*100) : 100};
-    }
-
     const wb=XLSX.utils.book_new(),total=filtered.length;
-    const avgPct=Math.round(filtered.reduce((s,r)=>{ const c=calcEPP(r); return s+(c.pct/100); },0)/total*100);
-    const full=filtered.filter(r=>calcEPP(r).pct===100).length;
+    const avgPct=Math.round(filtered.reduce((s,r)=>{ const {pct}=calcEPP(r); return s+pct; },0)/total);
+    const full=filtered.filter(r=>{ const {ok,app}=calcEPP(r); return app>0&&ok===app; }).length;
     const sinEPP=filtered.filter(r=>r.falt&&r.falt.length>0).length;
     const sinBPM=filtered.filter(r=>r.bpmNocumple&&r.bpmNocumple.length>0).length;
     const avgBPM=filtered.length?Math.round(filtered.reduce((s,r)=>{
@@ -1955,13 +1972,11 @@ async function exportarExcel(){
     filtered.forEach(r=>{
       const eppCols = allEPP.map(e=>{const v=r.epp&&r.epp[e.id];return v==='ok'?'OK':v==='nok'?'FALTA':v==='na'?'N/A':'—';});
       const bpmCols = allBPM.map(b=>{const v=r.bpm&&r.bpm[b.id];return v==='cumple'?'CUMPLE':v==='nocumple'?'NO CUMPLE':'—';});
-      const {ok,app,pct} = calcEPP(r);
-      const faltantes = r.epp ? Object.entries(r.epp).filter(([,v])=>v==='nok').map(([id])=>{ const e=allEPP.find(x=>x.id===id); return e?e.nombre:id; }).join(', ') : '';
-      const naItems   = r.epp ? Object.entries(r.epp).filter(([,v])=>v==='na' ).map(([id])=>{ const e=allEPP.find(x=>x.id===id); return e?e.nombre:id; }).join(', ') : '';
+      const {ok:rOk, app:rApp, pct:rPct} = calcEPP(r);
       det.push([r.fechaGuardado,r.horaGuardado,r.turno,r.trab,r.depto,r.sup,
         ...eppCols,
-        ok, app, app>0?pct+'%':'—',
-        faltantes, naItems,
+        rOk, rApp, rApp>0 ? rPct+'%' : '—',
+        (r.falt||[]).join(', '),(r.naList||[]).join(', '),
         ...bpmCols,
         (r.bpmNocumple||[]).join(', '),r.obs||'']);
     });
@@ -1974,11 +1989,11 @@ async function exportarExcel(){
     const dm={};
     filtered.forEach(r=>{
       if(!dm[r.depto])dm[r.depto]={t:0,f:0,ok:0,app:0,bpmF:0,bpmOk:0};
-      const {ok,app}=calcEPP(r);
+      const {ok:rOk, app:rApp} = calcEPP(r);
       dm[r.depto].t++;
       dm[r.depto].f+=(r.falt&&r.falt.length?1:0);
-      dm[r.depto].ok+=ok;
-      dm[r.depto].app+=app;
+      dm[r.depto].ok+=rOk;
+      dm[r.depto].app+=rApp;
       dm[r.depto].bpmF+=(r.bpmNocumple&&r.bpmNocumple.length?1:0);
       dm[r.depto].bpmOk+=BPM.filter(b=>r.bpm&&r.bpm[b.id]==='cumple').length;
     });
