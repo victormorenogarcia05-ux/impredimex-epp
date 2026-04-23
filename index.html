@@ -426,6 +426,27 @@ textarea { resize:vertical; min-height:70px; }
 </div>
 
 <!-- Modal editar EPP -->
+<div id="edit-worker-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.6);align-items:center;justify-content:center">
+  <div style="background:rgba(255,255,255,.93);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-radius:20px;border:1px solid rgba(255,255,255,.98);box-shadow:var(--shadow-md);padding:1.5rem;width:400px;max-width:94vw">
+    <div style="font-size:14px;font-weight:700;color:var(--brand-navy);margin-bottom:1rem">✏️ Editar Trabajador</div>
+    <input type="hidden" id="edit-worker-original">
+    <div class="fg" style="margin-bottom:1rem">
+      <label>Nombre</label>
+      <input type="text" id="edit-worker-nombre">
+    </div>
+    <div class="fg" style="margin-bottom:1rem">
+      <label>Departamento</label>
+      <select id="edit-worker-depto">
+        <option value="">Seleccionar...</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:1rem">
+      <button class="btn btn-primary" style="flex:2" onclick="saveEditWorker()">Guardar cambios</button>
+      <button class="btn btn-outline" style="flex:1" onclick="closeEditWorkerModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div id="edit-epp-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.6);align-items:center;justify-content:center">
   <div style="background:rgba(255,255,255,.93);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-radius:20px;border:1px solid rgba(255,255,255,.98);box-shadow:0 0 0 0.5px rgba(0,32,96,.07),0 8px 24px rgba(0,32,96,.1),0 24px 60px rgba(0,32,96,.12),inset 0 1px 1px rgba(255,255,255,1),inset 1px 0 1px rgba(255,255,255,.9),inset -1px 0 1px rgba(255,255,255,.9),inset 0 -1px 1px rgba(0,32,96,.03);padding:1.5rem;width:460px;max-width:94vw;box-shadow:var(--shadow-md)">
     <div style="font-size:14px;font-weight:700;color:var(--brand-navy);margin-bottom:1rem">✏️ Editar EPP</div>
