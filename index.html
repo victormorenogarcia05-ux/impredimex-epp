@@ -5,11 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>IMPREDIMEX — Control de EPP</title>
 
-<!-- ╔══════════════════════════════════════════════════════════╗
-     ║  CONFIGURACIÓN FIREBASE — LLENA ESTOS 7 CAMPOS         ║
-     ║  Ver instrucciones en el archivo GUIA_FIREBASE.txt      ║
-     ╚══════════════════════════════════════════════════════════╝ -->
+<!-- PWA: instalable en PC, Android e iOS con su propio icono -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#003580">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="EPP">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  CONFIGURACIÓN — dos proyectos de Firebase a la vez               ║
+     ║  El comportamiento esperado está en SPECS.md. Antes de tocar el   ║
+     ║  login, los permisos o el personal, lee contexto-suite.md: eso    ║
+     ║  afecta a las cinco apps, no solo a esta.                         ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
 <script>
+  // ── Proyecto propio de EPP: catálogo y registros (Realtime Database) ─
   const FIREBASE_CONFIG = {
     apiKey:            "AIzaSyD94Poc0YzN6aCzoNLtM_0vk2mthfeO-B8",
     authDomain:        "impredimex-epp.firebaseapp.com",
@@ -20,19 +32,46 @@
     appId:             "1:1027625836828:web:c800d9110206bd56eb5ad9"
   };
 
-  // ── Contraseñas de acceso ─────────────────────────────────
-  const PASSWORDS = {
-    admin:      "IMPREDIMEX",   // Acceso total (catálogo + eliminar)
-    supervisor: "imagenes"      // Solo checklist, dashboard, historial, exportar
+  // ── Proyecto compartido de la suite: login y lista de personal ──────
+  // No es secreto: la configuración de un cliente web de Firebase es pública.
+  // Lo que protege el acceso son las reglas y App Check, no ocultar esto.
+  const SUITE_CONFIG = {
+    apiKey:            "AIzaSyBAfEAWPYCdt_7kN1uHqTmPiRHIn6BgOyo",
+    authDomain:        "impredimex-suite.firebaseapp.com",
+    projectId:         "impredimex-suite",
+    storageBucket:     "impredimex-suite.firebasestorage.app",
+    messagingSenderId: "272151508788",
+    appId:             "1:272151508788:web:df68c90faa8cc1996cd761"
   };
-  let currentRole = null; // 'admin' | 'supervisor'
+
+  // Identificador de esta app dentro del campo `apps` de cada colaborador.
+  const APP_ID  = 'epp';
+  // No existe como dominio real: solo arma un identificador único para Auth.
+  const DOMINIO = '@impredimex.local';
+
+  // ⚠️ PENDIENTE — Clave de sitio de reCAPTCHA v3 para App Check (SPEC-008).
+  // Es pública, va en el código a propósito. Mientras esté vacía, App Check
+  // no se activa y la base queda como está hoy.
+  const APPCHECK_SITE_KEY = '';
+
+  // Dirección de la app de RRHH, para el aviso del Catálogo.
+  // Verificada contra `base: '/rrhh-pwa/'` en el vite.config.ts de ese repo.
+  const RRHH_URL = 'https://impredimex-hub.github.io/rrhh-pwa/';
+
+  // SPEC-002 — Bloqueo por inactividad.
+  const INACTIVIDAD_MS = 30 * 60 * 1000;
+
+  let currentRole = null;  // 'ADMIN' | 'SUPERVISOR'
+  let sesion      = null;  // {nomina, nombre, depto, rol}
 </script>
 
 <!-- Firebase SDKs -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-<!-- Chart.js & SheetJS -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check-compat.js"></script>
+<!-- SheetJS (exportación) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <style>
@@ -401,17 +440,24 @@ textarea { resize:vertical; min-height:70px; }
       </div>
     </div>
 
-    <!-- Campo contraseña -->
-    <div class="lock-label">Contraseña</div>
+    <!-- Campo nómina -->
+    <div class="lock-label">Número de nómina</div>
     <div class="lock-field">
-      <input type="password" id="pwd-input" placeholder="" autocomplete="current-password"
-             onkeydown="if(event.key==='Enter')checkPassword()">
+      <input type="text" id="nomina-input" inputmode="numeric" autocomplete="username"
+             placeholder="" onkeydown="if(event.key==='Enter')document.getElementById('pwd-input').focus()">
+    </div>
+
+    <!-- Campo clave -->
+    <div class="lock-label" style="margin-top:.75rem">Clave de 6 dígitos</div>
+    <div class="lock-field">
+      <input type="password" id="pwd-input" inputmode="numeric" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')entrar()">
       <button class="lock-eye" onclick="togglePwd()" title="Ver/ocultar">👁</button>
     </div>
-    <div class="lock-error" id="lock-error">Contraseña incorrecta. Intenta de nuevo.</div>
+    <div class="lock-error" id="lock-error">Nómina o clave incorrecta.</div>
 
     <!-- Botón entrar -->
-    <button class="lock-btn" onclick="checkPassword()">Entrar</button>
+    <button class="lock-btn" id="lock-btn" onclick="entrar()">Entrar</button>
 
     <!-- Face ID -->
     <div id="bio-btn-wrap" style="display:none">
@@ -425,27 +471,7 @@ textarea { resize:vertical; min-height:70px; }
   <div class="lock-footer">Impresión y Diseño de México S.A. de C.V.</div>
 </div>
 
-<!-- Modal editar EPP -->
-<div id="edit-worker-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.6);align-items:center;justify-content:center">
-  <div style="background:rgba(255,255,255,.93);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-radius:20px;border:1px solid rgba(255,255,255,.98);box-shadow:var(--shadow-md);padding:1.5rem;width:400px;max-width:94vw">
-    <div style="font-size:14px;font-weight:700;color:var(--brand-navy);margin-bottom:1rem">✏️ Editar Trabajador</div>
-    <input type="hidden" id="edit-worker-original">
-    <div class="fg" style="margin-bottom:1rem">
-      <label>Nombre</label>
-      <input type="text" id="edit-worker-nombre">
-    </div>
-    <div class="fg" style="margin-bottom:1rem">
-      <label>Departamento</label>
-      <select id="edit-worker-depto">
-        <option value="">Seleccionar...</option>
-      </select>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:1rem">
-      <button class="btn btn-primary" style="flex:2" onclick="saveEditWorker()">Guardar cambios</button>
-      <button class="btn btn-outline" style="flex:1" onclick="closeEditWorkerModal()">Cancelar</button>
-    </div>
-  </div>
-</div>
+
 
 <div id="edit-epp-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.6);align-items:center;justify-content:center">
   <div style="background:rgba(255,255,255,.93);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-radius:20px;border:1px solid rgba(255,255,255,.98);box-shadow:0 0 0 0.5px rgba(0,32,96,.07),0 8px 24px rgba(0,32,96,.1),0 24px 60px rgba(0,32,96,.12),inset 0 1px 1px rgba(255,255,255,1),inset 1px 0 1px rgba(255,255,255,.9),inset -1px 0 1px rgba(255,255,255,.9),inset 0 -1px 1px rgba(0,32,96,.03);padding:1.5rem;width:460px;max-width:94vw;box-shadow:var(--shadow-md)">
@@ -498,6 +524,8 @@ textarea { resize:vertical; min-height:70px; }
         <span id="sync-label">Conectando…</span>
         &nbsp;·&nbsp;
         <span id="role-badge" style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600">—</span>
+        &nbsp;·&nbsp;
+        <a href="#" onclick="salir();return false;" style="font-size:11px;font-weight:600;color:inherit;text-decoration:underline">Salir</a>
       </div>
     </div>
   </div>
@@ -522,10 +550,8 @@ textarea { resize:vertical; min-height:70px; }
       <div class="form-row">
         <div class="fg">
           <label>Realiza la revisión</label>
-          <div class="ac-wrap">
-            <input type="text" id="sup-input" placeholder="Buscar nombre..." autocomplete="off">
-            <div class="ac-list" id="ac-sup-list"></div>
-          </div>
+          <div class="worker-info" id="sup-disp">—</div>
+          <input type="hidden" id="sup-input">
         </div>
         <div class="fg">
           <label>Turno</label>
@@ -548,6 +574,7 @@ textarea { resize:vertical; min-height:70px; }
         <label>Departamento</label>
         <div class="worker-info" id="depto-disp">— selecciona un trabajador —</div>
         <input type="hidden" id="trab-depto">
+        <input type="hidden" id="trab-nomina">
       </div>
     </div>
 
@@ -639,33 +666,20 @@ textarea { resize:vertical; min-height:70px; }
 
   <!-- CATALOGO -->
   <div id="tab-catalogo" style="display:none">
-    <!-- Sub-tabs -->
-    <div style="display:flex;gap:4px;margin-bottom:1rem">
-      <button id="ct-personal-btn" class="btn btn-primary" style="flex:1;font-size:13px" onclick="showCatTab('personal')">👥 Personal</button>
-      <button id="ct-epp-btn" class="btn btn-outline" style="flex:1;font-size:13px" onclick="showCatTab('epp')">🦺 Catálogo EPP</button>
-    </div>
-
-    <!-- PERSONAL -->
-    <div id="ct-personal">
-      <div class="card">
-        <div class="card-title-bar"><div class="bar-accent"></div><div class="sec-title" style="margin:0">Agregar trabajador</div></div>
-        <div class="form-row">
-          <div class="fg"><label>Nombre completo</label><input type="text" id="new-nombre" placeholder="Ej. GARCIA LOPEZ JOSE"></div>
-          <div class="fg"><label>Departamento</label><select id="new-depto"><option value="">Seleccionar...</option></select></div>
-        </div>
-        <button class="btn btn-red" onclick="addWorker()">+ Agregar al catálogo</button>
-      </div>
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-          <div class="sec-title" style="margin:0">Personal activo / baja</div>
-          <input type="text" id="cat-search" placeholder="Buscar..." style="width:170px;font-size:12px" oninput="renderCatalogo()">
-        </div>
-        <div id="cat-list"></div>
+    <!-- El personal ya no se administra aquí: la lista válida vive en la suite
+         y solo RRHH la escribe (SPEC-011). -->
+    <div class="card" style="border-left:4px solid var(--brand-navy-mid)">
+      <div style="font-size:13px;font-weight:700;color:var(--brand-navy);margin-bottom:.35rem">El personal se administra en RRHH</div>
+      <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55">
+        Altas, bajas y cambios de departamento se hacen una sola vez en la app de
+        Recursos Humanos. Esta aplicación lee esa lista y no la modifica, para que
+        las cinco apps de la suite vean exactamente el mismo personal.
+        <a id="rrhh-link" href="#" target="_blank" rel="noopener" style="color:var(--brand-navy);font-weight:600">Abrir RRHH</a>
       </div>
     </div>
 
     <!-- EPP CATALOG -->
-    <div id="ct-epp" style="display:none">
+    <div id="ct-epp">
       <div class="card">
         <div class="card-title-bar"><div class="bar-accent"></div><div class="sec-title" style="margin:0">Agregar EPP</div></div>
         <div class="form-row">
@@ -726,6 +740,7 @@ textarea { resize:vertical; min-height:70px; }
     <div class="ac-wrap" style="margin-bottom:1rem">
       <input type="text" id="edit-sup-input" placeholder="Buscar nombre…" autocomplete="off" style="font-size:14px">
       <div class="ac-list" id="ac-edit-sup-list"></div>
+      <input type="hidden" id="edit-sup-nomina">
     </div>
     <div class="sec-title" style="margin-bottom:.5rem">EPP</div>
     <div class="edit-epp-grid" id="edit-epp-grid"></div>
@@ -750,11 +765,16 @@ textarea { resize:vertical; min-height:70px; }
      JAVASCRIPT
      ════════════════════════════════════════ -->
 <script>
-// ══ Catálogo base ══
-const BASE_PERSONAL = [
-  {nombre:"MUÑOZ MALDONADO CLAUDIA ALEJANDRA",depto:"PREPRENSA"},{nombre:"PACHECO SOTELO JULIA MARGARITA",depto:"ADMINISTRACIÓN"},{nombre:"SANCHEZ CORTES PABLO PEDRO",depto:"ADMINISTRACIÓN"},{nombre:"SAN JUAN SANTES TOMAS",depto:"LOGÍSTICA"},{nombre:"MARTINEZ CASTRO MA. TRINIDAD",depto:"ADMINISTRACIÓN"},{nombre:"MOLINA REYES NICOLAS",depto:"FLEXOGRAFÍA"},{nombre:"ANTONIO REYES FELIX",depto:"PREPRENSA"},{nombre:"SOSA BAUTISTA ADRIAN GUADALUPE",depto:"FLEXOGRAFÍA"},{nombre:"MORELOS GUERRERO MARIA JOSEFA",depto:"RECURSOS HUMANOS"},{nombre:"VIDAL DIAZ MANUEL",depto:"MANTENIMIENTO"},{nombre:"MOTA SAUL",depto:"LOGÍSTICA"},{nombre:"RIOS MORENO EDUARDO",depto:"TINTAS"},{nombre:"DEL ANGEL HERNANDEZ PAULA",depto:"ACONDICIONADO"},{nombre:"MONTES FLORES GABRIELA",depto:"ACONDICIONADO"},{nombre:"PEREZ ZAVALETA ANGEL",depto:"ADMINISTRACIÓN"},{nombre:"CRUZ SANDOVAL NORMA BEATRIZ",depto:"ACONDICIONADO"},{nombre:"AYALA GUZMAN ADRIANA",depto:"ACONDICIONADO"},{nombre:"RIVERA RIVERA NICASIO",depto:"ACONDICIONADO"},{nombre:"MARTINEZ GUILLEN RAFAEL",depto:"ROTOGRABADO"},{nombre:"DE LA TORRE JIMENEZ MARCO ALBERTO",depto:"ACONDICIONADO"},{nombre:"MAGALLANES LOPEZ ANGEL GAMALIEL",depto:"DIGITAL"},{nombre:"DELGADO ALVAREZ ANA MARIA",depto:"ACONDICIONADO"},{nombre:"VILLEGAS MORQUECHO KARLA",depto:"PREPRENSA"},{nombre:"CORREA MIRAMONTES FRANCISCO JAVIER",depto:"MANTENIMIENTO"},{nombre:"OROZCO MACIAS ANGEL NOE",depto:"ADMINISTRACIÓN"},{nombre:"RIVERA JIMENEZ VIRIDIANA MONSERRAT",depto:"ADMINISTRACIÓN"},{nombre:"DIAZ HERNANDEZ ANA LAURA",depto:"ACONDICIONADO"},{nombre:"CALDERON TOPETE ANGEL",depto:"VENTAS"},{nombre:"CABRERA MARTINEZ RICARDO",depto:"MANTENIMIENTO"},{nombre:"CHAVEZ CIBRIAN ANA ROSA",depto:"CALIDAD"},{nombre:"MONTES DE OCA VELA ANTONIO DE JESUS",depto:"MANTENIMIENTO"},{nombre:"GONZALEZ LOPEZ ELIZABETH",depto:"ADMINISTRACIÓN"},{nombre:"SANTIAGO TICANTE ERICK ROMAN",depto:"FLEXOGRAFÍA"},{nombre:"CERVANTES DIAZ BERNARDO",depto:"ROTOGRABADO"},{nombre:"CRUZ HERNANDEZ JUAN PABLO",depto:"LOGÍSTICA"},{nombre:"VEGA TREJO JOSE JUAN",depto:"ROTOGRABADO"},{nombre:"GUTIERREZ CRUZ LUIS MANUEL",depto:"ROTOGRABADO"},{nombre:"CASTORENA GOMEZ ERIKA",depto:"ACONDICIONADO"},{nombre:"SERRANO GUTIERREZ LUIS FRANCISCO",depto:"TINTAS"},{nombre:"CRUZ  BENIGNO AMALIA",depto:"ACONDICIONADO"},{nombre:"CHAVEZ VIZCARRA DANIEL",depto:"LOGÍSTICA"},{nombre:"BAUTISTA MADRID KARLA ARACELI",depto:"PREPRENSA"},{nombre:"NUÑEZ ARELLANO CANDELARIO",depto:"LOGÍSTICA"},{nombre:"BELTRAN GONZALEZ NALLELY KARINA",depto:"TINTAS"},{nombre:"MORALES JIMENEZ SERGIO ARTURO",depto:"LOGÍSTICA"},{nombre:"NAVARRO CASTILLO  RUBEN DE JESUS",depto:"CALIDAD"},{nombre:"GOMEZ JIMENEZ JOSE IVAN",depto:"MANTENIMIENTO"},{nombre:"JULIAN IGLESIAS RODOLFO",depto:"ACONDICIONADO"},{nombre:"RAMOS LOPEZ JAVIER SANTIAGO",depto:"ROTOGRABADO"},{nombre:"ARMENTA HERNANDEZ ALMA YADIRA",depto:"CALIDAD"},{nombre:"AVENDAÑO DIAZ FRANCISCO",depto:"FLEXOGRAFÍA"},{nombre:"MARCIAL HERNANDEZ CORNELIO",depto:"ROTOGRABADO"},{nombre:"ZARATE MONROY DANIEL",depto:"FLEXOGRAFÍA"},{nombre:"SANCHEZ FLORES SANDRA YOQUEVED",depto:"ACONDICIONADO"},{nombre:"TOMAS ZEPEDA DIEGO JOSUE",depto:"FLEXOGRAFÍA"},{nombre:"CORONA JIMENEZ FATIMA GUADALUPE",depto:"ACONDICIONADO"},{nombre:"CAMPOS HUERTA JANETTE GEORGINA",depto:"ADMINISTRACIÓN"},{nombre:"ARTEAGA SANTOS PEDRO GUADALUPE",depto:"ACONDICIONADO"},{nombre:"GARCIA VAZQUEZ ROSA",depto:"CALIDAD"},{nombre:"SANDOVAL MARTINEZ ENRIQUE",depto:"MANTENIMIENTO"},{nombre:"MORENO GARCIA VICTOR",depto:"OPERACIONES"},{nombre:"CARDENAS PEREZ DANIEL",depto:"OPERACIONES"},{nombre:"CAMACHO GUERRERO VIANNEY MONTSERRAT",depto:"ADMINISTRACIÓN"},{nombre:"VALENCIA REYES RAMON",depto:"ROTOGRABADO"},{nombre:"PRISCILIANO JIMENEZ MARICELA",depto:"ACONDICIONADO"},{nombre:"CASTRO CASTAÑEDA ALVARO ISAIAS",depto:"ROTOGRABADO"},{nombre:"ESTRADA RODRIGUEZ ALDO YAEL",depto:"TINTAS"},{nombre:"VILCHIS JAIME SANDRA MONTSERRAT",depto:"OPERACIONES"},{nombre:"ANDRADE GUTIERREZ VICTOR MANUEL",depto:"VENTAS"},{nombre:"ESPARZA LOPEZ CAREN ISELA",depto:"ACONDICIONADO"},{nombre:"SOTO MENESES OSCAR",depto:"OPERACIONES"},{nombre:"COLIN VARA CARLOS",depto:"MANTENIMIENTO"},{nombre:"LUGARDO ALTAMIRANO MARIA ROSALINA",depto:"ACONDICIONADO"},{nombre:"CURIEL HERNANDEZ MARIO ALBERTO",depto:"FLEXOGRAFÍA"},{nombre:"FRANCO CONTRERAS OMAR ALEJANDRO",depto:"VENTAS"},{nombre:"DIAZ DE LEON JESSICA GUADALUPE",depto:"ACONDICIONADO"},{nombre:"JIMENEZ LOPEZ AURORA ESTEPHANY",depto:"VENTAS"},{nombre:"TELLO JASSO FERNANDO",depto:"FLEXOGRAFÍA"},{nombre:"FRIAS BRAVO LUIS GERARDO",depto:"ROTOGRABADO"},{nombre:"MORALES MORALES RUFINO",depto:"ACONDICIONADO"},{nombre:"MORAN RAMOS ANA ROSA",depto:"ACONDICIONADO"},{nombre:"GONZALEZ TELLEZ MIGUEL ANGEL",depto:"FLEXOGRAFÍA"},{nombre:"GALVAN RIVAS MARITZA",depto:"RECURSOS HUMANOS"},{nombre:"GARCIA ELVIRA FRANCISCO JAVIER",depto:"FLEXOGRAFÍA"},{nombre:"PAEZ SANTOS MAURICIO ARMANDO",depto:"LOGÍSTICA"},{nombre:"LUNA ARANDA ANA DELIA",depto:"ACONDICIONADO"},{nombre:"CASTRUITA CRUZ SERGIO",depto:"OPERACIONES"},{nombre:"GONZALEZ ROMERO FRANCISCO JESUS",depto:"ROTOGRABADO"},{nombre:"MIRANDA MORÁN KARLA MILAGROS",depto:"VENTAS"},{nombre:"DUEÑAS RAMIREZ JUAN CARLOS",depto:"FLEXOGRAFÍA"},{nombre:"LUNA GARCIA LUIS FERNANDO",depto:"CALIDAD"},{nombre:"BEJAR ROBLES ROSA",depto:"RECURSOS HUMANOS"},{nombre:"RODRIGUEZ MARTINEZ PAOLA ALEJANDRA",depto:"ACONDICIONADO"},{nombre:"GONZALEZ MORALES CRISTIAN RUBEN",depto:"LOGÍSTICA"},{nombre:"VARGAS REYES ALDHER EDUARDO",depto:"MANTENIMIENTO"},{nombre:"AGUILAR SALINAS BRENDA",depto:"ACONDICIONADO"},{nombre:"LEMUS SANCHEZ DALIA GUADALUPE",depto:"RECURSOS HUMANOS"},{nombre:"AVALOS MONREAL JOSE DAVID",depto:"ACONDICIONADO"},{nombre:"BOBADILLA BARBA MARIA DE LOURDES",depto:"ACONDICIONADO"},{nombre:"MONRRY EVERASTICO ELBIA",depto:"RECURSOS HUMANOS"},{nombre:"MENDEZ LEYVA BRISA GUADALUPE",depto:"ACONDICIONADO"},{nombre:"RODRIGUEZ RUIZ MARIA GUADALUPE",depto:"FLEXOGRAFÍA"},{nombre:"GARCIA GALLARDO SILVIA",depto:"ACONDICIONADO"},{nombre:"ANTONIO RAMOS LOPEZ",depto:"ACONDICIONADO"},{nombre:"JESUS CADENA BARBOSA",depto:"ACONDICIONADO"},{nombre:"GONZALEZ MARTINEZ CRISTOPER MOISES",depto:"ACONDICIONADO"},{nombre:"PEREZ HUERTA LUIS ROBERTO",depto:"ACONDICIONADO"},{nombre:"ZARATE MONROY SAMUEL",depto:"OPERACIONES"},{nombre:"MERINO MARTINEZ JAIR ISRAEL",depto:"CALIDAD"},{nombre:"HERRERA JACQUEZ TANIA SARAHI",depto:"OPERACIONES"},{nombre:"GONZALEZ MARTINEZ AGUSTINA",depto:"ACONDICIONADO"},{nombre:"ALCALA SOTO MARIA DE LOURDES",depto:"ACONDICIONADO"},{nombre:"RIVERA LOZANO EVIN",depto:"ROTOGRABADO"},{nombre:"CARRILLO LOPEZ ELIZABETH",depto:"ACONDICIONADO"},{nombre:"ANTONIO MARTINEZ ADOLFO",depto:"ACONDICIONADO"},{nombre:"VILLANUEVA MARTINEZ LUZ ELENA",depto:"ACONDICIONADO"},{nombre:"HUERTA PRIETO MARIANA",depto:"CALIDAD"}
-];
-const DEPTOS = [...new Set(BASE_PERSONAL.map(p=>p.depto))].sort();
+// ══ Personal ══
+// La lista de personal ya no vive aquí. Se lee de `colaboradores` en el
+// proyecto impredimex-suite y solo RRHH la escribe (regla 1 de la suite).
+let colaboradores = [];   // [{nomina, nombre, depto}] — se llena al iniciar sesión
+
+// Catálogo cerrado de departamentos, igual al de la suite. Se comparan como
+// texto exacto: un acento distinto deja al trabajador sin EPP asignado.
+const DEPTOS = ['ACONDICIONADO','ADMINISTRACIÓN','CALIDAD','DIGITAL','FLEXOGRAFÍA',
+  'LOGÍSTICA','MANTENIMIENTO','OPERACIONES','PREPRENSA','RECURSOS HUMANOS',
+  'ROTOGRABADO','TINTAS','VENTAS'];
 // ── Catálogo base de EPP (editable desde Catálogo > EPP) ──
 const BASE_EPP_CATALOG = [
   {id:'casco',      nombre:'Casco de seguridad',                deptos:['LOGÍSTICA','MANTENIMIENTO']},
@@ -809,63 +829,185 @@ BPM.forEach(b => bpmSt[b.id] = null);
 let registros = [];
 let workerRegistros = null;  // null = modo normal; array = modo búsqueda por trabajador
 let lastKey   = null;  // para paginación 'cargar más'
-let customP   = {added:[],removed:[]};
 let eppSt     = {};
 let pendingPhoto = null;
 let currentDepto = '';
-let trendChart   = null;
 let db = null;
+let suiteAuth = null, suiteDb = null;
+let dbBloqueada = false;   // true si falló la sesión anónima (SPEC-008)
 EPP.forEach(e => eppSt[e.id] = null);
 
 function getPersonal(){
-  const rm = new Set(customP.removed||[]);
-  const mod = customP.modified||{};
-  // Base workers: skip removed, apply modifications
-  const base = BASE_PERSONAL
-    .filter(p=>!rm.has(p.nombre))
-    .map(p=> mod[p.nombre] ? {...p, ...mod[p.nombre]} : p);
-  // Added workers: apply modifications by original key
-  const added = (customP.added||[]).map(p=> mod[p.nombre] ? {...p, ...mod[p.nombre]} : p);
-  return [...base, ...added];
+  return colaboradores;
 }
 
-// ══ LOCK SCREEN ══
-function checkPassword(){
-  const val = document.getElementById('pwd-input').value;
+// ══ ACCESO (SPEC-001) ══
+// Dos proyectos a la vez: el de EPP (por defecto, sus datos) y el de la suite
+// (con nombre, login y personal). Sin el nombre las dos configuraciones se pisan.
+function initApps(){
+  if(firebase.apps.length) return;
+  firebase.initializeApp(FIREBASE_CONFIG);
+  if(APPCHECK_SITE_KEY){
+    try { firebase.appCheck().activate(APPCHECK_SITE_KEY, true); }
+    catch(e){ console.error('App Check no se pudo activar', e); }
+  }
+  const suiteApp = firebase.initializeApp(SUITE_CONFIG, 'suite');
+  suiteAuth = suiteApp.auth();
+  suiteDb   = suiteApp.firestore();
+}
+
+function mensajeDeError(codigo){
+  switch(codigo){
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':        return 'Nómina o clave incorrecta.';
+    case 'auth/invalid-email':         return 'Ese número de nómina no tiene un formato válido.';
+    case 'auth/too-many-requests':     return 'Demasiados intentos fallidos. Espera unos minutos.';
+    case 'auth/network-request-failed':return 'Sin conexión. Revisa tu red e inténtalo otra vez.';
+    default:                           return 'No se pudo iniciar sesión. Inténtalo de nuevo.';
+  }
+}
+
+function mostrarErrorAcceso(msg){
   const err = document.getElementById('lock-error');
-  if(val === PASSWORDS.admin){
-    currentRole = 'admin';
-  } else if(val === PASSWORDS.supervisor){
-    currentRole = 'supervisor';
-  } else {
-    err.style.display = 'block';
+  err.textContent = msg;
+  err.style.display = 'block';
+}
+
+async function entrar(){
+  const nomina = document.getElementById('nomina-input').value.trim();
+  const clave  = document.getElementById('pwd-input').value;
+  const btn    = document.getElementById('lock-btn');
+  if(!nomina || !clave){ mostrarErrorAcceso('Escribe tu nómina y tu clave.'); return; }
+  btn.disabled = true; btn.textContent = 'Entrando…';
+  try {
+    await suiteAuth.signInWithEmailAndPassword(nomina + DOMINIO, clave);
+    await sincronizarSesion(suiteAuth.currentUser);
+  } catch(e){
+    mostrarErrorAcceso(mensajeDeError(e.code));
     document.getElementById('pwd-input').value = '';
     document.getElementById('pwd-input').focus();
+  } finally {
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+}
+
+// Punto único por donde entra y sale la sesión, para que dé igual si el
+// disparo vino de onAuthStateChanged, del botón Entrar o del desbloqueo.
+let preparando = false;
+async function sincronizarSesion(user){
+  if(preparando) return;
+  if(!user){
+    sesion = null; currentRole = null; appBloqueada = false;
     return;
   }
+  const nom = (user.email || '').split('@')[0];
+  if(sesion && sesion.nomina === nom){
+    if(appBloqueada) desbloquearPantalla();
+    return;
+  }
+  preparando = true;
+  try { sesion = null; await prepararSesion(user); }
+  finally { preparando = false; }
+}
+
+// Tener cuenta no da acceso: lo da el valor 'epp' en `apps`.
+async function prepararSesion(user){
+  const nomina = (user.email || '').split('@')[0];
+  let doc;
+  try {
+    doc = await suiteDb.collection('colaboradores').doc(nomina).get();
+  } catch(e){
+    mostrarErrorAcceso('No se pudo leer tu registro de personal. Revisa tu conexión.');
+    await suiteAuth.signOut();
+    return;
+  }
+  if(!doc.exists){
+    mostrarErrorAcceso('Tu cuenta no tiene registro de personal. Avisa a Recursos Humanos.');
+    await suiteAuth.signOut(); return;
+  }
+  const c = doc.data() || {};
+  if(c.estatus !== 'ACTIVO'){
+    mostrarErrorAcceso('Esta cuenta está dada de baja.');
+    await suiteAuth.signOut(); return;
+  }
+  if(!(c.apps || []).includes(APP_ID)){
+    mostrarErrorAcceso('Tu cuenta no tiene acceso a EPP.');
+    await suiteAuth.signOut(); return;
+  }
+  // Ausencia de papel equivale al más bajo: nunca se concede por omisión.
+  sesion = {
+    nomina,
+    nombre: c.nombreCompleto || nomina,
+    depto:  c.departamento || '',
+    rol:    (c.roles || {})[APP_ID] || 'SUPERVISOR'
+  };
+  currentRole = sesion.rol;
+  await cargarPersonal();
+  await sesionAnonimaEPP();
+  mostrarApp();
+}
+
+// SPEC-003: el autocompletado necesita a TODO el personal activo, no solo a
+// quienes operan la app: se verifica a cualquier trabajador.
+async function cargarPersonal(){
+  try {
+    const snap = await suiteDb.collection('colaboradores')
+                              .where('estatus','==','ACTIVO').get();
+    colaboradores = snap.docs.map(d => ({
+      nomina: d.id,
+      nombre: (d.data().nombreCompleto || '').trim(),
+      depto:  (d.data().departamento  || '').trim()
+    })).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+  } catch(e){
+    colaboradores = [];
+    toast('❌ No se pudo cargar la lista de personal: ' + e.message);
+  }
+}
+
+// SPEC-008: las reglas de EPP exigen sesión + App Check. Esta sesión no
+// identifica a nadie; solo distingue a la app del resto del mundo.
+async function sesionAnonimaEPP(){
+  try {
+    if(!firebase.auth().currentUser) await firebase.auth().signInAnonymously();
+    dbBloqueada = false;
+  } catch(e){
+    dbBloqueada = true;
+    console.error('Sesión anónima', e);
+    setSyncState('error','Sin acceso a la base');
+    toast('❌ No se pudo abrir la sesión con la base de EPP. No podrás guardar ni consultar. Avisa a sistemas.');
+  }
+}
+
+function mostrarApp(){
+  appBloqueada = false;
+  document.getElementById('lock-error').style.display = 'none';
+  document.getElementById('pwd-input').value = '';
   document.getElementById('lock-screen').style.display = 'none';
   document.getElementById('app-wrapper').style.display = 'block';
+  document.getElementById('sup-input').value = sesion.nombre;
+  document.getElementById('sup-disp').textContent = sesion.nombre;
+  const link = document.getElementById('rrhh-link');
+  if(link) link.href = RRHH_URL;
   applyRole();
   initFirebase();
-  err.style.display = 'none';
-  // Offer biometric registration if supported and not already registered for this role
-  setTimeout(()=>{
-    if(!window.PublicKeyCredential) return;
-    const creds = getBioCreds();
-    const already = creds.some(c=>c.role===currentRole);
-    if(!already){
-      const modal = document.getElementById('bio-modal');
-      modal.style.display = 'flex';
-    }
-  }, 800);
+  iniciarVigilanciaInactividad();
+  ofrecerBiometria();
 }
+
+async function salir(){
+  try { await firebase.auth().signOut(); } catch(e){}
+  try { await suiteAuth.signOut(); } catch(e){}
+  location.reload();
+}
+
 function togglePwd(){
   const i = document.getElementById('pwd-input');
   i.type = i.type === 'password' ? 'text' : 'password';
 }
 
 // ══ BIOMETRÍA (WebAuthn) ══
-const BIO_KEY = 'imd_bio_creds'; // localStorage: [{id, role, name}]
+const BIO_KEY = 'imd_bio_creds'; // localStorage: [{id, nomina}]
 
 function getBioCreds(){
   try { return JSON.parse(localStorage.getItem(BIO_KEY)||'[]'); } catch{ return []; }
@@ -880,6 +1022,48 @@ function checkBioAvailable(){
   document.getElementById('bio-btn-wrap').style.display = 'block';
 }
 
+// ── Bloqueo por inactividad (SPEC-002) ──
+// La sesión de Firebase nunca se interrumpe: solo se tapa la pantalla.
+let inactividadTimer = null;
+let appBloqueada = false;
+
+function iniciarVigilanciaInactividad(){
+  ['click','keydown','touchstart','scroll','mousemove'].forEach(ev =>
+    document.addEventListener(ev, reiniciarInactividad, {passive:true}));
+  reiniciarInactividad();
+}
+function reiniciarInactividad(){
+  if(appBloqueada) return;
+  clearTimeout(inactividadTimer);
+  inactividadTimer = setTimeout(bloquearPantalla, INACTIVIDAD_MS);
+}
+function bloquearPantalla(){
+  if(!sesion || appBloqueada) return;
+  appBloqueada = true;
+  document.getElementById('app-wrapper').style.display = 'none';
+  document.getElementById('lock-screen').style.display = '';
+  document.getElementById('nomina-input').value = sesion.nomina;
+  document.getElementById('pwd-input').value = '';
+  mostrarErrorAcceso('Pantalla bloqueada por inactividad. Desbloquea con tu huella o tu clave.');
+  checkBioAvailable();
+}
+function desbloquearPantalla(){
+  appBloqueada = false;
+  document.getElementById('lock-error').style.display = 'none';
+  document.getElementById('lock-screen').style.display = 'none';
+  document.getElementById('app-wrapper').style.display = 'block';
+  reiniciarInactividad();
+}
+
+function ofrecerBiometria(){
+  checkBioAvailable();
+  setTimeout(()=>{
+    if(!window.PublicKeyCredential || !sesion) return;
+    if(getBioCreds().some(c => c.nomina === sesion.nomina)) return;
+    document.getElementById('bio-modal').style.display = 'flex';
+  }, 800);
+}
+
 function randomChallenge(){
   const arr = new Uint8Array(32);
   crypto.getRandomValues(arr);
@@ -888,14 +1072,28 @@ function randomChallenge(){
 
 async function loginWithBiometric(){
   const creds = getBioCreds();
-  if(!creds.length){ toast('No hay biometría registrada'); return; }
+  if(!creds.length){ toast('No hay biometría registrada en este dispositivo'); return; }
+  // La huella no identifica a nadie ante el servidor: quien identifica es la
+  // sesión de Firebase. Aquí solo se comprueba que la credencial corresponde
+  // a la nómina de la sesión que ya estaba abierta.
+  const user = suiteAuth.currentUser;
+  if(!user){
+    toast('No hay sesión abierta en este dispositivo. Entra con tu clave.');
+    return;
+  }
+  const nominaSesion = (user.email || '').split('@')[0];
+  const permitidas = creds.filter(c => c.nomina === nominaSesion);
+  if(!permitidas.length){
+    toast('La biometría registrada no corresponde a esta sesión. Entra con tu clave.');
+    return;
+  }
   try {
     const challenge = randomChallenge();
     const assertion = await navigator.credentials.get({
       publicKey: {
         challenge,
         timeout: 60000,
-        allowCredentials: creds.map(c=>({
+        allowCredentials: permitidas.map(c=>({
           id: base64ToBuffer(c.id),
           type: 'public-key',
           transports: ['internal']
@@ -903,15 +1101,10 @@ async function loginWithBiometric(){
         userVerification: 'required'
       }
     });
-    // Find which credential was used
     const usedId = bufferToBase64(assertion.rawId);
-    const matched = creds.find(c => c.id === usedId);
-    if(matched){
-      currentRole = matched.role;
-      document.getElementById('lock-screen').style.display = 'none';
-      document.getElementById('app-wrapper').style.display = 'block';
-      applyRole();
-      initFirebase();
+    if(permitidas.some(c => c.id === usedId)){
+      if(appBloqueada) desbloquearPantalla();
+      else if(!sesion) await prepararSesion(user);
     } else {
       toast('No se pudo verificar la identidad');
     }
@@ -925,6 +1118,7 @@ async function registerBiometric(){
   if(!window.PublicKeyCredential){
     toast('Este dispositivo no soporta biometría');return;
   }
+  if(!sesion){ toast('Inicia sesión antes de registrar tu huella'); return; }
   try {
     const challenge = randomChallenge();
     const userId = new Uint8Array(16);
@@ -933,7 +1127,7 @@ async function registerBiometric(){
       publicKey: {
         challenge,
         rp: { name: 'IMPREDIMEX EPP', id: location.hostname },
-        user: { id: userId, name: currentRole, displayName: currentRole==='admin'?'Administrador':'Supervisor' },
+        user: { id: userId, name: sesion.nomina, displayName: sesion.nombre },
         pubKeyCredParams: [
           { type: 'public-key', alg: -7 },
           { type: 'public-key', alg: -257 }
@@ -947,8 +1141,8 @@ async function registerBiometric(){
       }
     });
     const credId = bufferToBase64(cred.rawId);
-    const existing = getBioCreds().filter(c=>c.role!==currentRole);
-    saveBioCreds([...existing, { id: credId, role: currentRole }]);
+    const existing = getBioCreds().filter(c=>c.nomina!==sesion.nomina);
+    saveBioCreds([...existing, { id: credId, nomina: sesion.nomina }]);
     document.getElementById('bio-btn-wrap').style.display = 'block';
     toast('✅ Biometría registrada correctamente');
   } catch(e){
@@ -972,14 +1166,17 @@ function base64ToBuffer(b64){
 
 // ── Aplicar permisos según rol ──
 function applyRole(){
-  const isAdmin = currentRole === 'admin';
+  const isAdmin = currentRole === 'ADMIN';
+  // Ocultar el Historial es rendimiento, no confidencialidad: evita descargar
+  // todo el historial en cada apertura. Por eso Exportar sí está para ambos.
   document.querySelectorAll('.tab').forEach(t => {
     if(t.textContent.includes('Catálogo'))  t.style.display = isAdmin ? '' : 'none';
     if(t.textContent.includes('Historial')) t.style.display = isAdmin ? '' : 'none';
   });
   const badge = document.getElementById('role-badge');
-  if(badge){
-    badge.textContent = isAdmin ? '👤 Admin' : '👷 Supervisor';
+  if(badge && sesion){
+    badge.textContent = (isAdmin ? '👤 ' : '👷 ') + sesion.nomina + ' · ' + (isAdmin ? 'Admin' : 'Supervisor');
+    badge.title = sesion.nombre;
     badge.style.background = isAdmin ? 'rgba(0,32,96,.12)' : 'rgba(0,32,96,.06)';
   }
 }
@@ -1076,7 +1273,6 @@ function checkFirmaRequired(){
 // ══ FIREBASE ══
 function initFirebase(){
   try {
-    firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.database();
     setSyncState('syncing','Conectando…');
 
@@ -1091,10 +1287,7 @@ function initFirebase(){
       }
     });
 
-    // Escuchar catálogo de personal
-    db.ref('imd_personal').on('value', snap => {
-      if(snap.exists()) customP = snap.val();
-    });
+    // El personal ya no se escucha aquí: viene de `colaboradores` en la suite.
     // Escuchar catálogo de EPP
     db.ref('imd_catalogo_epp').on('value', snap => {
       if(snap.exists()) customEPP = snap.val();
@@ -1295,6 +1488,7 @@ function clearPhoto(){pendingPhoto=null;document.getElementById('pp-wrap').style
 function resetForm(){
   document.getElementById('trab-input').value='';
   document.getElementById('trab-depto').value='';
+  document.getElementById('trab-nomina').value='';
   const d=document.getElementById('depto-disp');d.textContent='— selecciona un trabajador —';d.style.color='';
   document.getElementById('obs').value='';
   currentDepto='';
@@ -1311,11 +1505,17 @@ function resetForm(){
 
 // ══ GUARDAR (Firebase) ══
 async function guardar(){
-  const sup=document.getElementById('sup-input').value.trim();
+  if(!sesion){toast('Sesión no iniciada');return;}
+  // El supervisor no se escribe: se toma de la sesión. Es el cambio central
+  // de la v2 y elimina la posibilidad de registrar a nombre de otra persona.
+  const sup=sesion.nombre;
+  const supNomina=sesion.nomina;
   const turno=document.getElementById('turno').value;
   const trab=document.getElementById('trab-input').value.trim();
   const depto=document.getElementById('trab-depto').value;
-  if(!sup||!turno||!trab||!depto){toast('Completa todos los datos de la revisión');return;}
+  const trabNomina=document.getElementById('trab-nomina').value;
+  if(!turno||!trab||!depto){toast('Completa todos los datos de la revisión');return;}
+  if(!trabNomina){toast('Selecciona al trabajador de la lista. Si no aparece, hay que darlo de alta en RRHH.');return;}
   if(EPP.some(e=>eppSt[e.id]===null)){toast('Marca el estado de todos los EPPs');return;}
   if(BPM.some(b=>bpmSt[b.id]===null)){toast('Marca el estado de todas las Buenas Prácticas');return;}
 
@@ -1341,7 +1541,9 @@ async function guardar(){
     fechaGuardado: now.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}),
     horaGuardado:  now.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
     semana: weekKey(now),
-    sup,turno,trab,depto,
+    // Copia, no referencia: nómina y nombre tal como estaban al guardar.
+    // Corregir después la lista de personal no altera el histórico.
+    sup,supNomina,turno,trab,trabNomina,depto,
     falt: falt.length ? falt : [],
     naList: naList.length ? naList : [],
     totalOk,applicable,total:EPP.length,
@@ -1365,11 +1567,6 @@ async function guardar(){
   }
 }
 
-// ══ Personal en Firebase ══
-async function savePersonal(){
-  if(!db) return;
-  try { await db.ref('imd_personal').set(customP); } catch(e){}
-}
 async function saveEPPCatalog(){
   if(!db) return;
   try { await db.ref('imd_catalogo_epp').set(customEPP); } catch(e){}
@@ -1388,124 +1585,12 @@ function getLast8Weeks(){
   return w;
 }
 
-// ══ Dashboard ══
-function renderDashboard(){
-  const total=registros.length;
-  const today=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const hoy=registros.filter(r=>r.fechaGuardado===today).length;
-  const full=registros.filter(r=>r.totalOk===(r.applicable??r.total)&&(r.applicable??r.total)>0).length;
-  const avg=total?Math.round(registros.reduce((s,r)=>{const a=r.applicable??r.total;return s+(a>0?r.totalOk/a:1);},0)/total*100):0;
-  document.getElementById('dash-metrics').innerHTML=`
-    <div class="mc"><div class="mc-label">Total revisiones</div><div class="mc-val">${total}</div><div class="mc-sub">registros globales</div></div>
-    <div class="mc"><div class="mc-label">Cumplimiento</div><div class="mc-val">${total?avg+'%':'—'}</div><div class="mc-sub">EPP aplicables</div></div>
-    <div class="mc accent"><div class="mc-label">Hoy</div><div class="mc-val">${hoy}</div><div class="mc-sub">revisiones</div></div>
-    <div class="mc"><div class="mc-label">EPP completo</div><div class="mc-val">${full}</div><div class="mc-sub">100% OK</div></div>`;
-  renderTrend();renderBarEPP();renderBarDepto();
-}
-function renderReincidencias(){
-  const counts={};
-  registros.filter(r=>r.falt&&r.falt.length>0).forEach(r=>{counts[r.trab]=(counts[r.trab]||0)+1;});
-  const reinc=Object.entries(counts).filter(([_,c])=>c>=2).sort((a,b)=>b[1]-a[1]);
-  const el=document.getElementById('dash-reinc');
-  if(!reinc.length){el.innerHTML='<div class="reinc-none">✅ Sin reincidencias detectadas.</div>';return;}
-  el.innerHTML=reinc.map(([nombre,cnt])=>{
-    const eppFalt=[...new Set(registros.filter(r=>r.trab===nombre&&r.falt&&r.falt.length>0).flatMap(r=>r.falt))];
-    const bpmFalt=[...new Set(registros.filter(r=>r.trab===nombre&&r.bpmNocumple&&r.bpmNocumple.length>0).flatMap(r=>r.bpmNocumple||[]))];
-    const eppLine=eppFalt.length?`<div style="margin-top:3px"><strong>EPP:</strong> ${eppFalt.join(', ')}</div>`:'';
-    const bpmLine=bpmFalt.length?`<div style="margin-top:2px"><strong>BPM:</strong> ${bpmFalt.join(', ')}</div>`:'';
-    return `<div class="alert-item"><div class="alert-icon"><svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg></div><div><div class="alert-name">${nombre}</div><div class="alert-detail">${cnt} incumplimientos${eppLine}${bpmLine}</div></div></div>`;
-  }).join('');
-}
-function renderTrend(){
-  const weeks=getLast8Weeks(),labels=weeks.map(w=>'Sem '+w.split('-W')[1]);
-  const data=weeks.map(w=>{
-    const wr=registros.filter(r=>r.semana===w);if(!wr.length)return null;
-    return Math.round(wr.reduce((s,r)=>{const a=r.applicable??r.total;return s+(a>0?r.totalOk/a:1);},0)/wr.length*100);
-  });
-  const ctx=document.getElementById('trend-chart').getContext('2d');
-  if(trendChart)trendChart.destroy();
-  trendChart=new Chart(ctx,{type:'line',data:{labels,datasets:[{label:'% Cumplimiento',data,borderColor:'#003580',backgroundColor:'rgba(0,53,128,.1)',pointBackgroundColor:'#C8102E',pointBorderColor:'#003580',pointRadius:5,tension:.35,fill:true,spanGaps:true,borderWidth:2.5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%',font:{size:11}},grid:{color:'rgba(0,53,128,.07)'}},x:{ticks:{font:{size:11}},grid:{display:false}}}}});
-}
-function renderBarEPP(){
-  const allEPP = getEPPCatalog();
-  const cnt={};
-  allEPP.forEach(e=>{cnt[e.id]=0;});
-  registros.forEach(r=>{
-    if(r.epp) Object.entries(r.epp).forEach(([id,v])=>{ if(v==='nok') cnt[id]=(cnt[id]||0)+1; });
-  });
-  const sorted = allEPP.map(e=>({nombre:e.nombre,count:cnt[e.id]||0}))
-    .sort((a,b)=>b.count-a.count).slice(0,5);
-  const ctx = document.getElementById('chart-epp-top');
-  if(!ctx) return;
-  if(window._chartEPPTop) window._chartEPPTop.destroy();
-  window._chartEPPTop = new Chart(ctx, {
-    type:'bar',
-    data:{
-      labels: sorted.map(s => s.nombre.length>22 ? s.nombre.substring(0,20)+'…' : s.nombre),
-      datasets:[{
-        label:'Incumplimientos',
-        data: sorted.map(s=>s.count),
-        backgroundColor:'rgba(200,16,46,0.75)',
-        borderColor:'#C8102E',
-        borderWidth:1.5,
-        borderRadius:5,
-      }]
-    },
-    options:{
-      responsive:true, maintainAspectRatio:false, indexAxis:'y',
-      plugins:{legend:{display:false}},
-      scales:{
-        x:{ticks:{font:{size:11}}, grid:{color:'rgba(0,53,128,.07)'}, beginAtZero:true},
-        y:{ticks:{font:{size:11}}, grid:{display:false}}
-      }
-    }
-  });
-}
+// ══ Tablero ══
+// Retirado en la v2: sus funciones nunca se invocaban y sus contenedores no
+// existían en el HTML. Vuelve como SPEC-010, alimentado por un acumulado y no
+// por el historial completo. Con él se retiró Chart.js, que solo usaba esto.
 
-function renderBarDepto(){
-  // BPM chart — sorted descending
-  const bpmData = BPM.map(b=>({
-    nombre: b.nombre.length>28 ? b.nombre.substring(0,26)+'…' : b.nombre,
-    count: registros.filter(r => r.bpm && r.bpm[b.id]==='nocumple').length
-  })).sort((a,b)=>b.count-a.count);
-
-  const ctx = document.getElementById('chart-bpm-top');
-  if(ctx){
-    if(window._chartBPMTop) window._chartBPMTop.destroy();
-    window._chartBPMTop = new Chart(ctx, {
-      type:'bar',
-      data:{
-        labels: bpmData.map(b=>b.nombre),
-        datasets:[{
-          label:'No cumple',
-          data: bpmData.map(b=>b.count),
-          backgroundColor:'rgba(0,53,128,0.75)',
-          borderColor:'#003580',
-          borderWidth:1.5,
-          borderRadius:5,
-        }]
-      },
-      options:{
-        responsive:true, maintainAspectRatio:false, indexAxis:'y',
-        plugins:{legend:{display:false}},
-        scales:{
-          x:{ticks:{font:{size:11}}, grid:{color:'rgba(0,53,128,.07)'}, beginAtZero:true},
-          y:{ticks:{font:{size:10}}, grid:{display:false}}
-        }
-      }
-    });
-  }
-
-  // Dept bar chart
-  if(!registros.length){document.getElementById('bar-depto').innerHTML='<div class="empty">Sin datos aún.</div>';return;}
-  const d={};
-  registros.forEach(r=>{if(!d[r.depto])d[r.depto]={t:0,f:0};d[r.depto].t++;if(r.falt&&r.falt.length)d[r.depto].f++;});
-  const arr=Object.entries(d).map(([k,v])=>({depto:k,pct:Math.round(v.f/v.t*100),f:v.f})).sort((a,b)=>b.pct-a.pct);
-  const maxF=Math.max(...arr.map(a=>a.f),1);
-  document.getElementById('bar-depto').innerHTML=arr.map(a=>`<div class="bar-row"><div class="bar-lbl">${a.depto}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(a.f/maxF*100)}%;background:${a.pct>=60?'var(--brand-navy)':a.pct>=30?'var(--brand-navy-mid)':'var(--brand-navy-light)'}"></div></div><div class="bar-pct">${a.pct}%</div></div>`).join('');
-}
-
-
+// ══ Historial ══
 function renderHistorial(){
   const ft=document.getElementById('f-turno').value;
   const fd=document.getElementById('f-depto').value;
@@ -1543,8 +1628,8 @@ function renderHistorial(){
       : r.firma
         ? `<img class="firma-img" src="${r.firma}" onclick="openFirmaUrl('${r._key}')" title="Ver firma" style="cursor:pointer">`
         : '';
-    const delBtn=currentRole==='admin'?`<button onclick="eliminarRegistro('${r._key}')" style="background:none;border:none;cursor:pointer;color:var(--brand-navy);font-size:18px;padding:4px;flex-shrink:0" title="Eliminar revisión">🗑</button>`:'';
-    const editBtn=currentRole==='admin'?`<button onclick="openEditModal('${r._key}')" style="background:none;border:none;cursor:pointer;color:var(--brand-navy);font-size:18px;padding:4px;flex-shrink:0" title="Editar revisión">✏️</button>`:'';
+    const delBtn=currentRole==='ADMIN'?`<button onclick="eliminarRegistro('${r._key}')" style="background:none;border:none;cursor:pointer;color:var(--brand-navy);font-size:18px;padding:4px;flex-shrink:0" title="Eliminar revisión">🗑</button>`:'';
+    const editBtn=currentRole==='ADMIN'?`<button onclick="openEditModal('${r._key}')" style="background:none;border:none;cursor:pointer;color:var(--brand-navy);font-size:18px;padding:4px;flex-shrink:0" title="Editar revisión">✏️</button>`:'';
     return `<div class="rec-item">
       <div style="flex:1">
         <div class="rec-name">${r.trab}</div>
@@ -1560,7 +1645,25 @@ function renderHistorial(){
         ${(photoBtn||firmaBtn)?`<div style="display:flex;align-items:center;gap:6px">${photoBtn}${firmaBtn}</div>`:''}
       </div>
     </div>`;
-  }).join('');
+  }).join('') + (workerRegistros === null
+    ? `<div style="text-align:center;margin-top:1rem"><button class="btn btn-outline" id="btn-cargar-mas" onclick="cargarMas()">Cargar más…</button></div>`
+    : '');
+}
+
+// Carga inicial del historial: solo el último bloque, nunca todo.
+// Descargar el historial completo en cada apertura es el consumo más pesado
+// de la app y es justo lo que la SPEC-005 evita.
+async function cargarPrimeros(){
+  if(!db || registros.length || workerRegistros !== null) return;
+  try {
+    const snap = await db.ref('imd_registros').orderByKey().limitToLast(20).once('value');
+    const nuevos = [];
+    snap.forEach(child => nuevos.unshift({_key:child.key, ...child.val()}));
+    registros = nuevos;
+    renderHistorial();
+  } catch(e){
+    toast('❌ No se pudo cargar el historial: ' + e.message);
+  }
 }
 
 // Helper: busca en workerRegistros primero, luego en registros
@@ -1592,7 +1695,7 @@ let editEppSt = {};
 let editBpmSt = {};
 
 function openEditModal(key){
-  if(currentRole!=='admin') return;
+  if(currentRole!=='ADMIN') return;
   const rec = findRecord(key);
   if(!rec) return;
   editKey = key;
@@ -1602,6 +1705,7 @@ function openEditModal(key){
   BPM.forEach(b=>{ if(editBpmSt[b.id]===undefined) editBpmSt[b.id]=null; });
   document.getElementById('edit-modal-name').textContent = `Editar: ${rec.trab}`;
   document.getElementById('edit-sup-input').value = rec.sup || '';
+  document.getElementById('edit-sup-nomina').value = rec.supNomina || '';
   renderEditEPP();
   renderEditBPM();
   document.getElementById('edit-modal').classList.add('open');
@@ -1649,20 +1753,49 @@ function closeEditModal(){
 }
 async function saveEditRecord(){
   if(!editKey||!db) return;
+  if(!sesion){ toast('Sesión no iniciada'); return; }
   const supNuevo = document.getElementById('edit-sup-input').value.trim();
   if(!supNuevo){ toast('El campo "Realiza la revisión" no puede estar vacío'); return; }
+  const supNominaNueva = document.getElementById('edit-sup-nomina').value || null;
+  const anterior = findRecord(editKey);
+  if(!anterior){ toast('No se encontró el registro'); return; }
+
   const falt = EPP.filter(e=>editEppSt[e.id]==='nok').map(e=>e.nombre);
   const naList = EPP.filter(e=>editEppSt[e.id]==='na').map(e=>e.nombre);
   const applicable = EPP.filter(e=>editEppSt[e.id]!=='na').length;
   const totalOk = EPP.filter(e=>editEppSt[e.id]==='ok').length;
   const bpmNocumple = BPM.filter(b=>editBpmSt[b.id]==='nocumple').map(b=>b.nombre);
   const updates = { sup:supNuevo, epp:editEppSt, bpm:editBpmSt, falt, naList, bpmNocumple, totalOk, applicable };
+  if(supNominaNueva) updates.supNomina = supNominaNueva;
+
+  // Toda corrección deja constancia: quién, cuándo, qué campo, valor anterior
+  // y valor nuevo. El valor anterior no se pierde.
+  const igual = (a,b) => JSON.stringify(a===undefined?null:a) === JSON.stringify(b===undefined?null:b);
+  const cambios = [];
+  Object.keys(updates).forEach(campo => {
+    if(!igual(anterior[campo], updates[campo]))
+      cambios.push({ campo, antes: anterior[campo]===undefined?null:anterior[campo], despues: updates[campo] });
+  });
+  if(!cambios.length){ toast('No hay cambios que guardar'); closeEditModal(); return; }
+
+  const ahora = new Date();
+  const entradas = cambios.map(c => ({
+    campo: c.campo,
+    antes: c.antes,
+    despues: c.despues,
+    porNomina: sesion.nomina,
+    porNombre: sesion.nombre,
+    ts: ahora.getTime(),
+    fecha: ahora.toLocaleString('es-MX')
+  }));
+  updates.correcciones = [ ...(anterior.correcciones || []), ...entradas ];
+
   try {
     await db.ref('imd_registros/'+editKey).update(updates);
     const arr = workerRegistros || registros;
     const idx = arr.findIndex(r=>r._key===editKey);
     if(idx !== -1) arr[idx] = {...arr[idx], ...updates};
-    toast('✅ Revisión actualizada');
+    toast('✅ Revisión corregida — queda constancia del cambio');
     closeEditModal();
     renderHistorial();
   } catch(e){
@@ -1670,7 +1803,7 @@ async function saveEditRecord(){
   }
 }
 function eliminarRegistro(key){
-  if(currentRole!=='admin'){toast('Sin permisos para eliminar');return;}
+  if(currentRole!=='ADMIN'){toast('Sin permisos para eliminar');return;}
   if(!confirm('¿Eliminar esta revisión permanentemente?')) return;
   db.ref('imd_registros/'+key).remove()
     .then(()=>{
@@ -1685,41 +1818,11 @@ function eliminarRegistro(key){
 function closePhotoModal(){document.getElementById('photo-modal').classList.remove('open');}
 
 // ══ Catálogo ══
-function renderCatalogo(){
-  const q = document.getElementById('cat-search').value.toLowerCase();
-  const removed = new Set(customP.removed||[]);
-  const mod = customP.modified||{};
-  // Build display list: base (not removed) + added, with modifications applied
-  const base = BASE_PERSONAL.filter(p=>!removed.has(p.nombre)).map(p=>({...p,...(mod[p.nombre]||{}), _orig:p.nombre, _isBase:true}));
-  const added = (customP.added||[]).map(p=>({...p,...(mod[p.nombre]||{}), _orig:p.nombre, _isBase:false}));
-  const all = [...base,...added].filter(p=>!q||p.nombre.toLowerCase().includes(q)||p.depto.toLowerCase().includes(q));
-  const el=document.getElementById('cat-list');
-  // Also show workers currently in baja
-  const bajaBase = BASE_PERSONAL.filter(p=>removed.has(p.nombre)).map(p=>({...p,...(mod[p.nombre]||{}),_orig:p.nombre,_isBase:true,_isBaja:true}));
-  const bajaAdded = (customP.added||[]).filter(p=>removed.has(p.nombre)).map(p=>({...p,...(mod[p.nombre]||{}),_orig:p.nombre,_isBase:false,_isBaja:true}));
-  const allWithBaja = [...all,...bajaBase,...bajaAdded].filter(p=>!q||p.nombre.toLowerCase().includes(q)||p.depto.toLowerCase().includes(q));
-  if(!allWithBaja.length){el.innerHTML='<div class="empty">Sin resultados.</div>';return;}
-  el.innerHTML=allWithBaja.slice(0,100).map(p=>{
-    const isBaja=!!p._isBaja;
-    const isAdded=!p._isBase;
-    const isModified=!!(customP.modified||{})[p._orig];
-    const badge=isAdded?`<span class="badge b-ok" style="font-size:10px;margin-left:7px">Nuevo</span>`:isModified?`<span class="badge" style="font-size:10px;margin-left:7px;background:var(--brand-navy-light);color:var(--brand-navy)">Editado</span>`:'';
-    const ne=p._orig.replace(/'/g,"\'");
-    return `<div class="cat-item"><div class="${isBaja?'cat-baja':''}"><span class="cat-name">${p.nombre}</span>${badge}<div style="font-size:12px;color:var(--text-secondary)">${p.depto}</div></div><div style="display:flex;gap:6px;align-items:center;flex-shrink:0">${isBaja?'':`<button class="btn btn-outline" style="width:36px;height:32px;font-size:14px;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0" onclick="openEditWorkerModal('${ne}')" title="Editar">✏️</button>`}<button class="btn btn-outline" style="width:80px;height:32px;font-size:11px;padding:0;flex-shrink:0;font-weight:600" onclick="${isBaja?`restoreWorker('${ne}')`:`removeWorker('${ne}')`}">${isBaja?'Restaurar':'Dar baja'}</button></div></div>`;
-  }).join('');
-}
+// La administración de personal se retiró: la lista válida es `colaboradores`
+// en la suite y solo RRHH la escribe (SPEC-011). Aquí queda solo el EPP.
 function populateCatDeptos(){
-  const sel=document.getElementById('new-depto'),fsel=document.getElementById('f-depto');
-  DEPTOS.forEach(d=>{sel.innerHTML+=`<option>${d}</option>`;fsel.innerHTML+=`<option>${d}</option>`;});
-}
-
-// ── Sub-tabs de Catálogo ──
-function showCatTab(tab){
-  document.getElementById('ct-personal').style.display = tab==='personal' ? '' : 'none';
-  document.getElementById('ct-epp').style.display      = tab==='epp'      ? '' : 'none';
-  document.getElementById('ct-personal-btn').className = tab==='personal' ? 'btn btn-primary' : 'btn btn-outline';
-  document.getElementById('ct-epp-btn').className      = tab==='epp'      ? 'btn btn-primary' : 'btn btn-outline';
-  if(tab==='epp') renderEPPCatalog();
+  const fsel=document.getElementById('f-depto');
+  DEPTOS.forEach(d=>{ fsel.innerHTML+=`<option>${d}</option>`; });
 }
 function autoSetTurno(){
   const sel=document.getElementById('turno');
@@ -1738,7 +1841,6 @@ function autoSetTurno(){
   }
 }
 document.addEventListener('DOMContentLoaded', ()=>{
-  if(document.getElementById('ct-epp')) document.getElementById('ct-epp').style.display='none';
   autoSetTurno();
 });
 
@@ -1856,60 +1958,7 @@ async function saveEditEPP(){
   toast('✅ EPP actualizado');
   renderEPPCatalog();
 }
-async function addWorker(){
-  const n=document.getElementById('new-nombre').value.trim().toUpperCase(),d=document.getElementById('new-depto').value;
-  if(!n||!d){toast('Ingresa nombre y departamento');return;}
-  if(getPersonal().some(p=>p.nombre===n)){toast('Este trabajador ya existe');return;}
-  customP.added=customP.added||[];customP.added.push({nombre:n,depto:d});
-  await savePersonal();
-  document.getElementById('new-nombre').value='';document.getElementById('new-depto').value='';
-  toast('Trabajador agregado');renderCatalogo();
-}
-async function removeWorker(nombre){
-  customP.removed=customP.removed||[];if(!customP.removed.includes(nombre))customP.removed.push(nombre);
-  await savePersonal();toast('Trabajador dado de baja');renderCatalogo();
-}
-async function restoreWorker(nombre){
-  customP.removed=(customP.removed||[]).filter(n=>n!==nombre);
-  await savePersonal();toast('Trabajador restaurado');renderCatalogo();
-}
 
-// ── Editar trabajador ──
-function openEditWorkerModal(orig){
-  const p = getPersonal().find(x=>(x._orig||x.nombre)===orig) || getPersonal().find(x=>x.nombre===orig);
-  if(!p) return;
-  document.getElementById('edit-worker-original').value = orig;
-  document.getElementById('edit-worker-nombre').value   = p.nombre;
-  const sel = document.getElementById('edit-worker-depto');
-  sel.innerHTML = '<option value="">Seleccionar...</option>';
-  DEPTOS.forEach(d=>sel.innerHTML+=`<option${p.depto===d?' selected':''}>${d}</option>`);
-  sel.value = p.depto;
-  document.getElementById('edit-worker-modal').style.display = 'flex';
-}
-function closeEditWorkerModal(){
-  document.getElementById('edit-worker-modal').style.display = 'none';
-}
-async function saveEditWorker(){
-  const original  = document.getElementById('edit-worker-original').value;
-  const newNombre = document.getElementById('edit-worker-nombre').value.trim().toUpperCase();
-  const newDepto  = document.getElementById('edit-worker-depto').value;
-  if(!newNombre||!newDepto){toast('Completa nombre y departamento');return;}
-
-  customP.modified = customP.modified||{};
-
-  if(newNombre === original){
-    // Only department changed — store in modified map
-    customP.modified[original] = {depto: newDepto};
-  } else {
-    // Name changed — store both nombre and depto in modified map
-    customP.modified[original] = {nombre: newNombre, depto: newDepto};
-  }
-
-  await savePersonal();
-  closeEditWorkerModal();
-  toast('✅ Trabajador actualizado');
-  renderCatalogo();
-}
 
 // ══ Exportar ══
 function setExpSemana(){
@@ -2067,34 +2116,57 @@ const TAB_NAMES=['checklist','historial','catalogo','exportar'];
 function showTab(name){
   TAB_NAMES.forEach(t=>{document.getElementById('tab-'+t).style.display=t===name?'':'none';});
   document.querySelectorAll('.tab').forEach((el,i)=>{el.classList.toggle('active',TAB_NAMES[i]===name);});
-  if(name==='historial') renderHistorial();
-  if(name==='catalogo')  renderCatalogo();
+  if(name==='historial'){ renderHistorial(); cargarPrimeros(); }
+  if(name==='catalogo')  renderEPPCatalog();
   if(name==='exportar')  setExpSemana();
 }
 
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
 
 // ══ Init ══
+// Registro del service worker. Es lo que hace que el navegador ofrezca
+// instalar la app; sin él no aparece la opción.
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .catch(e => console.error('No se pudo registrar el service worker', e));
+  });
+}
+
+initApps();
+
 document.getElementById('date-disp').innerHTML =
   new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 buildEPPGrid();
 buildBPMGrid();
 populateCatDeptos();
-setupAC('sup-input','ac-sup-list',()=>{},getPersonal);
+
+// El supervisor ya no se busca: se toma de la sesión (SPEC-003).
 setupAC('trab-input','ac-trab-list',p=>{
   document.getElementById('trab-depto').value=p.depto;
+  document.getElementById('trab-nomina').value=p.nomina;
   const d=document.getElementById('depto-disp');d.textContent=p.depto;d.style.color='var(--text-primary)';
-  // Filter EPP by department
+  // El catálogo de EPP se filtra por departamento comparando texto exacto.
   currentDepto = p.depto;
   EPP = getEPPForDepto(p.depto);
   eppSt = {};
   EPP.forEach(e => eppSt[e.id] = null);
   buildEPPGrid();
 },getPersonal);
-document.getElementById('pwd-input').focus();
-checkBioAvailable();
 setupAC('hist-trab-input','ac-hist-trab-list',()=>{},getPersonal);
-setupAC('edit-sup-input','ac-edit-sup-list',()=>{},getPersonal);
+setupAC('edit-sup-input','ac-edit-sup-list',p=>{
+  document.getElementById('edit-sup-nomina').value = p.nomina;
+},getPersonal);
+
+checkBioAvailable();
+
+// La sesión sobrevive al recargar y al cerrar el navegador: la administra
+// Firebase Auth con persistencia local.
+suiteAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(e=>console.error(e));
+suiteAuth.onAuthStateChanged(async user => {
+  await sincronizarSesion(user);
+  if(!user) document.getElementById('nomina-input').focus();
+});
 </script>
 </body>
 </html>
