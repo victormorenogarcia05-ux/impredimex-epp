@@ -9,6 +9,8 @@ implementar el código.
 **Versión objetivo:** 2.0
 **Fecha:** 4 de septiembre de 2026
 **Metodología:** Spec-Driven Development (SDD)
+**Revisión:** 2.0-b — se marcan como implementadas las specs entregadas en esta
+versión y se agregan SPEC-010 y SPEC-011.
 
 > **Cómo leer este documento.** Cada spec lleva un **Estado**. Las marcadas como
 > `implementado` describen lo que la aplicación hace hoy. Las marcadas como
@@ -50,7 +52,7 @@ otorga cuota por proyecto, y concentrarlo todo colapsaría cinco cuotas en una.
 
 # SPEC-001 — Acceso a la aplicación
 
-**Estado:** pendiente
+**Estado:** implementado
 **Sustituye a:** SPEC-001 y SPEC-002 de la v1.1 (contraseñas compartidas y
 biometría sin identidad)
 
@@ -89,6 +91,9 @@ Persona autorizada para operar EPP.
   dominio real y Firebase no envía correos ni lo verifica.
 - **No hay autoservicio de recuperación.** El administrador restablece la clave
   desde la consola.
+- **La sesión se guarda en el dispositivo.** Se usa persistencia local de Firebase
+  Auth, así que cerrar el navegador no cierra la sesión. Salir es un acto
+  explícito: el botón Salir.
 
 ### Flujos alternativos
 - **Nómina o clave incorrecta:** "Nómina o clave incorrecta"
@@ -100,7 +105,7 @@ Persona autorizada para operar EPP.
 
 # SPEC-002 — Bloqueo local con biometría
 
-**Estado:** pendiente
+**Estado:** implementado
 
 ### Actor
 Usuario con sesión abierta en su dispositivo.
@@ -112,7 +117,8 @@ Usuario con sesión abierta en su dispositivo.
 ### Flujo principal
 1. Usuario registra su biometría desde la aplicación
 2. Sistema guarda la credencial en el navegador, asociada a su nómina
-3. Tras un periodo de inactividad, el sistema bloquea la pantalla sin cerrar sesión
+3. Tras **30 minutos** sin actividad, el sistema bloquea la pantalla sin cerrar
+   sesión
 4. El usuario desbloquea con su huella o rostro
 5. Sistema verifica que la credencial corresponda a la nómina de la sesión activa
 
@@ -132,6 +138,13 @@ Usuario con sesión abierta en su dispositivo.
 - **Un dispositivo, una persona.** El bloqueo biométrico no está diseñado para
   equipos compartidos; para cambiar de operador se cierra sesión y se entra con
   la clave del siguiente.
+- **La ventana de inactividad es de 30 minutos.** Se eligió pensando en un turno
+  de piso: el supervisor deja el dispositivo entre una revisión y otra y no
+  debería tener que desbloquear a cada rato. Cuenta cualquier toque, tecla o
+  desplazamiento sobre la pantalla.
+- **La credencial se asocia a la nómina, no al papel.** En la v1.1 se guardaba
+  por papel (`admin` / `supervisor`), lo que permitía que la huella de una
+  persona abriera la sesión de otra con el mismo papel.
 
 ### Flujos alternativos
 - **Dispositivo sin biometría:** el bloqueo pide la clave en lugar de la huella
@@ -141,8 +154,7 @@ Usuario con sesión abierta en su dispositivo.
 
 # SPEC-003 — Registro de verificación de EPP
 
-**Estado:** parcialmente implementado — cambia la captura del supervisor y la
-identificación del trabajador
+**Estado:** implementado
 
 ### Actor
 Usuario con papel `SUPERVISOR` o `ADMIN`.
@@ -216,7 +228,7 @@ Trabajador verificado, en el dispositivo del supervisor.
 
 # SPEC-005 — Papel del usuario dentro de la app
 
-**Estado:** pendiente
+**Estado:** implementado
 **Sustituye a:** SPEC-005 de la v1.1
 
 ### Actor
@@ -249,7 +261,7 @@ Sistema.
 
 # SPEC-006 — Historial y corrección de registros
 
-**Estado:** parcialmente implementado — se agrega la bitácora de cambios
+**Estado:** implementado
 
 ### Actor
 Usuario con papel `ADMIN`.
@@ -273,6 +285,11 @@ Usuario con papel `ADMIN`.
   junto al nuevo. Poder demostrar que un registro fue corregido, por quién y desde
   qué valor, vale más que impedir la corrección.
 - **La bitácora no se puede editar ni borrar** desde la aplicación.
+- **Borrar un registro completo sigue siendo posible para `ADMIN` y no deja
+  rastro.** Es la única vía por la que un registro puede desaparecer sin
+  constancia, y contradice el espíritu del resto de esta spec. Se conserva el
+  comportamiento de la v1.1 porque cambiarlo no estaba acordado; queda anotado
+  como punto abierto en la deuda técnica (#12).
 - **El supervisor original sí es corregible**, pero la corrección queda asentada
   con la misma constancia que cualquier otra.
 
@@ -301,7 +318,10 @@ Cualquier usuario con sesión iniciada.
 
 # SPEC-008 — Reglas de acceso a los datos
 
-**Estado:** pendiente
+**Estado:** implementado en la aplicación; **pendiente de configuración** en la
+consola de Firebase (App Check con reCAPTCHA, proveedor Anónimo y publicación de
+las reglas). Hasta que eso ocurra, la aplicación funciona pero la base sigue
+abierta.
 **Nuevo en la v2**
 
 ### Actor
@@ -342,6 +362,16 @@ Sistema.
 - **Falla el inicio de sesión anónimo:** la aplicación no puede leer ni escribir
   y debe avisarlo con claridad, no fallar en silencio
 
+### Orden de puesta en marcha
+El orden importa y no se puede invertir:
+
+1. Publicar esta versión de la aplicación, con App Check en modo **monitoreo**.
+2. Verificar en la consola que las peticiones llegan con testigo válido.
+3. Hasta entonces, activar la exigencia de App Check y publicar las reglas.
+
+Aplicar las reglas antes del paso 1 deja sin leer ni escribir a la versión que
+está en producción, que no inicia sesión de ninguna clase.
+
 > **Ruta de mejora.** Si algún día el proyecto pasa a plan de pago, Cloud
 > Functions permite emitir credenciales del proyecto de EPP a partir de la sesión
 > de la suite, y las reglas pasarían a distinguir por usuario sin duplicar
@@ -368,6 +398,92 @@ Sistema.
 
 ---
 
+# SPEC-010 — Tablero de indicadores
+
+**Estado:** pendiente
+**Nuevo en la v2**
+
+### Antecedente
+La v1.1 traía en el código un tablero completo —total de revisiones, porcentaje
+de cumplimiento, revisiones del día, gráfica de tendencia de ocho semanas, barras
+por EPP y por departamento, y lista de reincidentes— que **nunca se mostró**:
+nada lo invocaba y sus contenedores no existían en el HTML. Se retiró en la v2
+junto con la biblioteca de gráficas que solo él usaba.
+
+### Regla de negocio que condiciona su regreso
+- **No puede alimentarse del historial completo.** Calcular estos números sobre
+  todos los registros obliga a descargarlos en cada apertura, que es justo el
+  consumo que la SPEC-005 evita ocultándole el Historial al supervisor. Volver a
+  encenderlo así desharía esa decisión.
+- La vía viable es un **acumulado** que se actualice al guardar cada registro:
+  contadores por semana, por departamento y por tipo de EPP, más el conteo de
+  incumplimientos por trabajador. Leer eso cuesta unas cuantas lecturas, no miles.
+
+### Pendiente de definir
+Qué indicadores se quieren de verdad, quién los ve y con qué corte de tiempo.
+
+---
+
+# SPEC-011 — Catálogo de EPP
+
+**Estado:** implementado
+**Nuevo en la v2** — documenta una pestaña que la v1.1 tenía sin especificar
+
+### Actor
+Usuario con papel `ADMIN`.
+
+### Flujo principal
+1. Usuario abre la pestaña Catálogo
+2. Agrega, edita o da de baja equipo de protección, indicando a qué
+   departamentos aplica
+3. Los cambios se guardan en `imd_catalogo_epp`, en el proyecto de EPP
+
+### Reglas de negocio
+- **El catálogo de EPP sí vive en esta app.** Es dato propio de EPP, no de la
+  suite.
+- **El personal ya no se administra aquí.** La v1.1 permitía agregar, editar y
+  dar de baja trabajadores desde esta pestaña, guardándolos en `imd_personal`.
+  Eso desaparece: la lista válida es `colaboradores` en la suite y solo RRHH la
+  escribe. En su lugar la pestaña muestra un aviso con enlace a RRHH.
+- **Los departamentos se comparan como texto exacto.** Un acento o una mayúscula
+  distinta entre el catálogo y `colaboradores` deja al trabajador sin equipo
+  asignado, y falla en silencio.
+
+---
+
+# SPEC-012 — Instalación como aplicación
+
+**Estado:** implementado
+**Nuevo en la v2**
+
+### Flujo principal
+1. Usuario abre la dirección de EPP en el navegador
+2. El navegador ofrece instalarla; en iOS se agrega desde Compartir → Añadir a
+   pantalla de inicio
+3. La app queda con su propio icono, se abre sin barra de navegador y en
+   vertical
+
+### Reglas de negocio
+- **El icono distingue a esta app de las demás.** Las cinco comparten marca, así
+  que si todas usaran el logotipo de IMPREDIMEX el usuario tendría cinco iconos
+  idénticos en su pantalla. El de EPP es un casco de seguridad, y las otras
+  cuatro llevan un glifo propio con silueta deliberadamente distinta: personas
+  para RRHH, barras de Gantt para Procesos, lupa para Calidad y engrane para
+  Mantenimiento.
+- **Relleno sólido, no contorno.** Un trazo delgado se ve bien a 512 píxeles y
+  se rompe a 48, que es el tamaño al que el icono trabaja de verdad en la barra
+  de tareas. Sin texto dentro del icono por la misma razón.
+- **Instalable no significa que funcione sin conexión.** El service worker sirve
+  la pantalla desde caché para que abra rápido, pero guardar un registro,
+  consultar el historial o iniciar sesión siempre necesitan alcanzar Firebase.
+  No hay cola de envíos pendientes.
+- **La caché va con la red por delante.** Al revés, una versión vieja del
+  `index.html` se quedaría pegada en los dispositivos y las correcciones no
+  llegarían a nadie. En una app que se publica editando un solo archivo, ese es
+  el riesgo real, no el ahorro de tráfico.
+
+---
+
 # Deuda técnica conocida
 
 | # | Tema | Estado en la v2 |
@@ -375,11 +491,12 @@ Sistema.
 | 1 | Contraseñas en el código | **Se resuelve** (SPEC-001) |
 | 2 | Sin identidad individual | **Se resuelve** (SPEC-001, SPEC-003) |
 | 3 | Trazabilidad declarativa | **Se resuelve** (SPEC-003, SPEC-006) |
-| 4 | Personal duplicado | **Se resuelve**: `imd_personal` desaparece |
+| 4 | Personal duplicado | **Resuelto**: `imd_personal` y la lista de 121 nombres escrita en el código desaparecen |
 | 5 | Base sin reglas | **Se resuelve parcialmente** (SPEC-008): se cierra a extraños, no se distingue por usuario |
 | 6 | Ediciones sin rastro | **Se resuelve** (SPEC-006) |
 | 7 | Histórico sin nómina | **Se acepta**: los registros viejos conservan solo el nombre |
 | 8 | Sin modo sin conexión | **Sigue pendiente**: un guardado sin red se pierde |
 | 9 | Imágenes dentro de la base | **Sigue pendiente**: obliga a la purga de 90 días |
 | 10 | Departamento como texto | **Sigue pendiente**: un acento distinto deja a un trabajador sin equipo |
-| 11 | Repositorio público | **Sigue pendiente** hasta migrar el hosting |
+| 11 | Repositorio público | **Sigue pendiente** hasta migrar el hosting, pero ya no expone contraseñas |
+| 12 | Borrar registros no deja rastro | **Punto abierto** (SPEC-006): un `ADMIN` puede eliminar una revisión sin constancia |
